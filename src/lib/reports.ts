@@ -4,10 +4,10 @@ import { monthStartIn } from '@/lib/dates'
 
 const SHORT_MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-/** Facturado (por fecha de emisión, sin anuladas) y cobrado (pagos aprobados) por mes, últimos 12 meses. */
-export async function monthlyRevenue(tenantId: string, timeZone: string): Promise<MonthlyPoint[]> {
+/** Facturado (por fecha de emisión, sin anuladas) y cobrado (pagos aprobados) por mes, últimos N meses. */
+export async function monthlyRevenue(tenantId: string, timeZone: string, months = 12): Promise<MonthlyPoint[]> {
   const current = monthStartIn(timeZone)
-  const from = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() - 11, 1))
+  const from = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() - (months - 1), 1))
 
   const [invoiced, collected] = await Promise.all([
     prisma.$queryRaw<Array<{ month: Date; total: number }>>`
@@ -26,7 +26,7 @@ export async function monthlyRevenue(tenantId: string, timeZone: string): Promis
   const inv = new Map(invoiced.map((r) => [key(new Date(r.month)), r.total]))
   const col = new Map(collected.map((r) => [key(new Date(r.month)), r.total]))
 
-  return Array.from({ length: 12 }, (_, i) => {
+  return Array.from({ length: months }, (_, i) => {
     const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + i, 1))
     return {
       month: `${SHORT_MONTHS[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`,

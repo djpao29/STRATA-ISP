@@ -8,8 +8,13 @@ export function toNumber(value: Numeric) {
   return typeof value === 'number' ? value : value.toNumber()
 }
 
+/** Formato local de cada moneda (DOP → RD$1,234.50; USD → $1.234,50). */
+export function currencyLocale(currency: string) {
+  return currency === 'DOP' ? 'es-DO' : 'es-EC'
+}
+
 export function formatCurrency(value: Numeric, currency = 'USD') {
-  return new Intl.NumberFormat('es-EC', { style: 'currency', currency }).format(toNumber(value))
+  return new Intl.NumberFormat(currencyLocale(currency), { style: 'currency', currency }).format(toNumber(value))
 }
 
 /** Fechas de calendario (emisión, vencimiento, pago): se guardan a medianoche UTC. */
