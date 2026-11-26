@@ -12,8 +12,14 @@ import { requireUser } from '@/lib/session'
 import { can } from '@/lib/permissions'
 import { formatCurrency, formatDate, formatDay, toNumber } from '@/lib/format'
 import { CLIENT_MODE, CUSTOMER_STATUS, PAYMENT_METHOD } from '@/lib/labels'
-import { addService, deleteCustomer, deleteService, setCustomerStatus, toggleService } from '../actions'
+import { addService, changeZone, deleteCustomer, deleteService, setCustomerStatus, toggleService } from '../actions'
+import { manageAction } from '../../zones/actions'
 import { ServiceForm } from './service-form'
+import { ZoneSelectForm } from './zone-select-form'
+import { localNow as localNowIn } from '@/lib/dates'
+import { cycleInfo, lastCycleStart, nextCycleStart } from '@/lib/zones/cycle'
+import { formatCustomerCode } from '@/lib/zones/billing'
+import { formatDateTime } from '@/lib/format'
 
 export default async function CustomerDetailPage({ params }: { params: { id: string } }) {
   const user = await requireUser('customers')
@@ -24,9 +30,24 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
       invoices: { orderBy: { issueDate: 'desc' }, take: 12 },
       payments: { orderBy: { paidDate: 'desc' }, take: 12, include: { invoice: { select: { number: true } } } },
       tickets: { orderBy: { createdAt: 'desc' }, take: 10 },
+      zone: true,
+      networkActions: { orderBy: { createdAt: 'desc' }, take: 15, include: { router: { select: { name: true } } } },
     },
   })
   if (!customer) notFound()
+
+  const local = localNowIn(user.tenant.timezone)
+  const cycle = customer.zone ? cycleInfo(customer.zone, lastCycleStart(customer.zone, local)) : null
+  const nextInvoice = customer.zone ? nextCycleStart(customer.zone, local) : null
+  const zoneOptions = (
+    await prisma.zone.findMany({ where: { tenantId: user.tenantId, isActive: true }, orderBy: { invoiceDay: 'asc' } })
+  ).map((z) => ({ value: z.id, label: z.name }))
+  const zoneHistory = await prisma.auditLog.findMany({
+    where: { tenantId: user.tenantId, entity: 'Customer', entityId: customer.id, action: 'customer.zone' },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+    include: { user: { select: { name: true } } },
+  })
 
   const canWrite = can(user.role, 'customersWrite')
   const currency = user.tenant.currency
@@ -44,7 +65,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
   return (
     <div className="space-y-6">
-      <PageHeader title={`${customer.firstName} ${customer.lastName}`} description={`Cédula/RUC ${customer.cedula}`}>
+      <PageHeader title={`${customer.firstName} ${customer.lastName}`} description={`${formatCustomerCode(customer.code)} · Cédula/RUC ${customer.cedula}`}>
         {canWrite && (
           <Button asChild variant="outline">
             <Link href={`/dashboard/customers/${customer.id}/edit`}>
@@ -143,9 +164,65 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Zona de facturación</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {customer.zone && cycle && nextInvoice ? (
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-5">
+              <Info label="Zona">
+                <Link href={`/dashboard/zones/${customer.zone.id}`} className="font-medium text-blue-700 hover:underline">
+                  {customer.zone.name}
+                </Link>
+              </Info>
+              <Info label="Ciclo actual (factura)">{formatDate(cycle.cycleDate)}</Info>
+              <Info label="Límite de pago">{formatDate(cycle.dueDate)}</Info>
+              <Info label="Fecha de corte">{formatDate(cycle.suspendDate)}</Info>
+              <Info label="Próxima factura">{formatDate(nextInvoice)}</Info>
+            </dl>
+          ) : (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Sin zona asignada: este cliente no se factura ni se corta automáticamente.
+            </p>
+          )}
+          <div className="flex flex-wrap items-end gap-4 text-sm">
+            {canWrite && <ZoneSelectForm action={changeZone.bind(null, customer.id)} zones={zoneOptions} current={customer.zoneId} />}
+            {customer.suspendExempt && <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-800">Exento de corte automático</span>}
+            {customer.status === 'SUSPENDED' && (
+              <span className="text-xs text-muted-foreground">
+                Suspendido{' '}
+                {customer.suspensionSource === 'AUTO'
+                  ? 'automáticamente por falta de pago (se reconecta solo al pagar)'
+                  : 'manualmente (reconectar con "Cambiar estado")'}
+                {customer.suspendedAt && ` el ${formatDateTime(customer.suspendedAt, user.tenant.timezone)}`}
+              </span>
+            )}
+            {customer.reconnectedAt && customer.status === 'ACTIVE' && (
+              <span className="text-xs text-muted-foreground">
+                Última reconexión: {formatDateTime(customer.reconnectedAt, user.tenant.timezone)}
+              </span>
+            )}
+          </div>
+          {zoneHistory.length > 0 && (
+            <ul className="text-xs text-muted-foreground">
+              {zoneHistory.map((h) => {
+                const d = (h.details ?? {}) as { fromName?: string | null; toName?: string | null }
+                return (
+                  <li key={h.id}>
+                    {formatDateTime(h.createdAt, user.tenant.timezone)}: {d.fromName ?? 'Sin zona'} → {d.toName ?? 'Sin zona'}
+                    {h.user ? ` (por ${h.user.name})` : ''}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
       <DataTable
         title="Servicios"
-        headers={['Plan', 'Velocidad', 'Precio', 'Modo', 'IP / PPPoE', 'Router', 'Estado', '']}
+        headers={['Plan', 'Velocidad', 'Precio', 'Modo', 'IP / PPPoE', 'Router', 'Estado', 'En el router', '']}
         rowCount={customer.services.length}
         emptyText="Sin servicios contratados."
       >
@@ -164,6 +241,15 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
             <td>{s.router?.name ?? '—'}</td>
             <td>
               <StatusBadge value={s.isActive ? 'ACTIVE' : 'INACTIVE'} />
+            </td>
+            <td>
+              {s.router ? (
+                <span className={s.networkState === 'SUSPENDED' ? 'font-medium text-red-600' : 'text-green-700'}>
+                  {s.networkState === 'SUSPENDED' ? 'Cortado' : 'Habilitado'}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">Sin router</span>
+              )}
             </td>
             <td className="space-x-1 text-right">
               {canWrite && (
@@ -255,6 +341,37 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
           </tr>
         ))}
       </DataTable>
+      <DataTable
+        title="Cortes y reconexiones"
+        headers={['Fecha', 'Acción', 'Router', 'Estado', 'Detalle', '']}
+        rowCount={customer.networkActions.length}
+        emptyText="Sin cortes ni reconexiones registradas."
+      >
+        {customer.networkActions.map((a) => (
+          <tr key={a.id}>
+            <td>{formatDateTime(a.createdAt, user.tenant.timezone)}</td>
+            <td>
+              {a.type === 'SUSPEND' ? 'Corte' : 'Reconexión'} ({a.source === 'AUTO' ? 'automática' : 'manual'})
+            </td>
+            <td>{a.router?.name ?? '—'}</td>
+            <td>
+              {ACTION_STATUS[a.status]}
+              {a.attempts > 1 && <span className="text-xs text-muted-foreground"> · {a.attempts} intentos</span>}
+            </td>
+            <td className="max-w-xs whitespace-normal text-xs">
+              {a.reason}
+              {a.lastError && <div className="text-red-600">{a.lastError}</div>}
+            </td>
+            <td className="text-right">
+              {can(user.role, 'zonesWrite') && (a.status === 'FAILED' || a.status === 'PENDING') && (
+                <ActionButton action={manageAction} fields={{ id: a.id, op: 'retry' }} variant="outline" size="sm">
+                  Reintentar
+                </ActionButton>
+              )}
+            </td>
+          </tr>
+        ))}
+      </DataTable>
     </div>
   )
 }
@@ -266,4 +383,12 @@ function Info({ label, children }: { label: string; children: React.ReactNode })
       <dd className="mt-0.5">{children}</dd>
     </div>
   )
+}
+
+const ACTION_STATUS: Record<string, string> = {
+  PENDING: 'Pendiente',
+  RUNNING: 'Ejecutando',
+  DONE: 'Aplicada',
+  FAILED: 'Fallida',
+  CANCELLED: 'Cancelada',
 }

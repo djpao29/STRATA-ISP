@@ -12,7 +12,8 @@ permisos por rol.
 | --- | --- |
 | Clientes | Alta, edición, búsqueda, estados (pendiente, activo, suspendido, cancelado), ficha con servicios, facturas, pagos y tickets |
 | Planes | Catálogo de planes (velocidad y precio) |
-| Facturación | Facturación mensual automática sin duplicados, facturas puntuales, numeración correlativa, vencimientos, anulación, impresión |
+| Zonas | Ciclos de facturación por zona (Zona 15 y Zona 30 de serie, y las que crees): factura, límite de pago y corte por día del mes, facturación automática, cortes automáticos en MikroTik por falta de pago y reconexión automática al pagar, con registro y reintentos |
+| Facturación | Facturas mensuales generadas por las zonas, facturas puntuales, numeración correlativa, vencimientos, anulación, impresión |
 | Pagos | Registro de pagos por factura (parciales o totales), aprobación y rechazo, la factura se marca pagada sola |
 | Red | Inventario de IP, MAC y PPPoE por servicio, detección de IPs duplicadas |
 | Routers | Alta de equipos (contraseña cifrada) y prueba de conexión real a la API REST de RouterOS |
@@ -89,6 +90,57 @@ router se hace desde el servidor; el navegador nunca recibe credenciales.
   normalizarse.
 - Con varias instancias de la app, deja el recolector activo solo en una: `MONITORING_ENABLED=false` en las demás.
 
+## Zonas: facturación y cortes automáticos
+
+Cada cliente pertenece a una zona (obligatorio al crearlo; se cambia desde su ficha). Una zona define:
+
+| Campo | Zona 15 | Zona 30 |
+| --- | --- | --- |
+| Día de factura | 15 | 30 (en febrero, el último día) |
+| Límite de pago | 15 | 30 |
+| Día de corte | 20 | 5 del mes siguiente |
+| Gracia | 5 días | 5 días |
+
+Las fechas se calculan por día del mes, no sumando días: la factura del 30-nov se corta el 5-dic y la
+del 30-dic el 5-ene. Si el día de pago o de corte es menor que el anterior, cae en el mes siguiente.
+
+**Tareas programadas** (cada minuto, en el servidor, sin que nadie abra el panel):
+
+1. **Facturación:** cuando llega el día y la hora de factura de una zona, se emite una factura por cada
+   servicio activo de sus clientes activos, con el precio actual del plan. Un periodo ya facturado nunca
+   se repite (restricción en la base de datos + comprobación de periodo cubierto). Un servicio instalado
+   después del inicio del ciclo se factura desde el siguiente. Si el sistema arranca a mitad de un ciclo
+   cuyo corte ya pasó, ese ciclo no se factura (evita cortes inmediatos al ponerlo en marcha).
+2. **Vencimientos:** las facturas impagas pasan a "vencida" tras el límite de pago.
+3. **Cortes:** en la fecha y hora de corte, los clientes con facturas impagas (por defecto 1) se suspenden,
+   salvo los marcados como *exentos de corte*. Se vuelve a comprobar el pago justo antes de tocar el router.
+4. **Reconexión:** al registrar o aprobar un pago, si ya no queda deuda que justifique el corte, el cliente
+   se reconecta en el acto. Los cortes **manuales** nunca se revierten solos.
+5. **Cola de acciones en el router:** si el MikroTik no responde, el corte o la reconexión queda pendiente y
+   se reintenta (1, 2, 5, 10, 15, 30 min… hasta 12 veces). Los errores permanentes (usuario PPPoE
+   inexistente, sin permisos) quedan como *fallidos* con botón "Reintentar". Todo queda en
+   **Zonas → Registro de cortes**.
+
+Un bloqueo en la base de datos garantiza que, con varias instancias, solo una ejecute estas tareas.
+`JOBS_ENABLED=false` las desactiva en una instancia.
+
+### Cómo se corta en el MikroTik
+
+| Tipo de servicio | Corte | Reconexión |
+| --- | --- | --- |
+| PPPoE (con "Usuario PPPoE") | Se deshabilita el usuario en `/ppp secret` y se cierra su sesión activa | Se vuelve a habilitar (el cliente se reconecta solo) |
+| IP estática / DHCP (con IP) | Se agrega la IP a la address-list `morosos` | Se quita de la lista |
+
+Para que la address-list corte de verdad, el router debe tener una regla que la bloquee, por ejemplo:
+```
+/ip firewall filter add chain=forward src-address-list=morosos action=drop comment="WISPX: clientes cortados"
+```
+El nombre de la lista se puede cambiar por router (campo `suspendList`).
+
+El usuario del MikroTik necesita, además de `read,api,rest-api`, la política **write** para aplicar cortes.
+El código solo permite estas escrituras: habilitar/deshabilitar un usuario PPP, cerrar una sesión PPP y
+agregar/quitar una IP de la address-list; cualquier otra operación se rechaza antes de llegar al router.
+
 ## Desarrollo local
 
 Requisitos: Node 20+, Docker.
@@ -147,8 +199,9 @@ docker compose -f docker-compose.prod.yml exec -T db pg_dump -U wispx wispx | gz
 
 ## Límites conocidos
 
-- **MikroTik:** el monitoreo es completo y de solo lectura; la app todavía no crea, corta ni reactiva
-  clientes en el router automáticamente. Las alertas se ven en el panel; aún no se envían por WhatsApp o correo.
+- **MikroTik:** corta y reconecta clientes existentes, pero no crea usuarios PPPoE, colas ni reglas de
+  firewall (la regla que bloquea la lista `morosos` se crea a mano una vez). Las alertas y avisos de corte
+  se ven en el panel; aún no se envían por WhatsApp o correo.
 - **RouterOS 6** no tiene API REST: esos equipos no se pueden monitorear (la app lo indica al probar la conexión).
 - **OLT:** el inventario de ONUs es manual; no hay lectura por SNMP ni aprovisionamiento automático.
 - **WhatsApp:** hay configuración y envío de prueba; los recordatorios automáticos de pago necesitan
@@ -157,5 +210,6 @@ docker compose -f docker-compose.prod.yml exec -T db pg_dump -U wispx wispx | gz
   electrónicos autorizados.
 - **Varias instancias:** el límite de intentos de login es en memoria; con más de una instancia de la
   app hay que moverlo a Redis.
-- La facturación mensual y el paso a "vencida" se ejecutan al usarlas desde el panel; no hay tarea
-  programada (cron).
+- Entre un cambio de zona y el primer ciclo de la zona nueva puede quedar un tramo sin facturar (no se
+  prorratea); nunca se factura dos veces el mismo periodo.
+- Las facturas puntuales (creadas a mano) no generan cortes.

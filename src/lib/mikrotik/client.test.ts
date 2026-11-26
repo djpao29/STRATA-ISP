@@ -1,7 +1,7 @@
 import http from 'http'
 import type { AddressInfo } from 'net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { rosRequest, RouterOSError, type RouterConnection } from './client'
+import { rosRequest, rosWrite, RouterOSError, type RouterConnection } from './client'
 import { getInterfaces, getPppActive, getSystemInfo, monitorTraffic } from './routeros'
 
 /**
@@ -104,6 +104,16 @@ describe('cliente REST de RouterOS', () => {
     await expect(rosRequest(conn, 'POST', '/system/reboot')).rejects.toBeInstanceOf(RouterOSError)
     await expect(rosRequest(conn, 'POST', '/ppp/active/remove')).rejects.toThrow(/solo lectura/)
     expect(requests.some((r) => r.url.includes('reboot') || r.url.includes('remove'))).toBe(false)
+  })
+
+  it('escrituras: solo la lista cerrada de cortes y reconexiones, con campos permitidos', async () => {
+    const before = requests.length
+    await expect(rosWrite(conn, 'DELETE', '/ppp/secret/*1')).rejects.toThrow(/no permitida/)
+    await expect(rosWrite(conn, 'PATCH', '/system/identity')).rejects.toThrow(/no permitida/)
+    await expect(rosWrite(conn, 'PUT', '/ip/firewall/filter', { chain: 'forward' })).rejects.toThrow(/no permitida/)
+    await expect(rosWrite(conn, 'PATCH', '/ppp/secret/*1', { password: 'x' })).rejects.toThrow(/Campos no permitidos/)
+    await expect(rosWrite(conn, 'PATCH', '/ppp/secret/*1', { disabled: 'yes', profile: 'x' })).rejects.toThrow(/Campos no permitidos/)
+    expect(requests.length).toBe(before) // nada llegó al router
   })
 
   it('tiempo de espera con un reintento', async () => {

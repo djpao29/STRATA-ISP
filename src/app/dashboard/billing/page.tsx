@@ -11,7 +11,7 @@ import { PAGE_SIZE, Pagination, SearchBar, param, parsePage } from '@/components
 import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/session'
 import { markOverdueInvoices } from '@/lib/billing'
-import { currentPeriodIn, monthStartIn } from '@/lib/dates'
+import { monthStartIn } from '@/lib/dates'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { invoiceStatusOptions } from '@/lib/labels'
 import { generateInvoices } from './actions'
@@ -64,7 +64,6 @@ export default async function BillingPage({ searchParams }: Props) {
     }),
   ])
 
-  const defaultPeriod = currentPeriodIn(user.tenant.timezone)
 
   return (
     <div className="space-y-6">
@@ -85,14 +84,15 @@ export default async function BillingPage({ searchParams }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Facturación mensual</CardTitle>
+          <CardTitle>Facturación por zonas</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Crea una factura por cada servicio activo de los clientes activos, con el precio actual del plan. Si un servicio ya
-            tiene la factura de ese mes, no se duplica.
+            Las facturas mensuales se generan solas en el servidor, el día y la hora de cada{' '}
+            <Link href="/dashboard/zones" className="text-blue-700 underline">zona</Link>, con el precio actual del plan. Un periodo ya
+            facturado nunca se duplica. Si necesitas adelantarlo, puedes facturar el ciclo vigente ahora.
           </p>
-          <GenerateInvoicesForm action={generateInvoices} defaultPeriod={defaultPeriod} />
+          <GenerateInvoicesForm action={generateInvoices} />
         </CardContent>
       </Card>
 

@@ -14,6 +14,24 @@ export function todayIn(timeZone: string, now = new Date()): Date {
   return new Date(Date.UTC(get('year'), get('month') - 1, get('day')))
 }
 
+/**
+ * Fecha y hora LOCAL de la empresa expresada como UTC (sin desplazamiento): a las 20:15 del
+ * 25-nov en Guayaquil devuelve 2026-11-25T20:15Z. Sirve para comparar con fechas de calendario.
+ */
+export function localNow(timeZone: string, now = new Date()): Date {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now)
+  const get = (type: string) => Number(parts.find((p) => p.type === type)!.value)
+  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute')))
+}
+
 /** Primer día del mes actual en la zona horaria de la empresa. */
 export function monthStartIn(timeZone: string, now = new Date()): Date {
   const today = todayIn(timeZone, now)

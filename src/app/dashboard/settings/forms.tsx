@@ -26,7 +26,7 @@ export function CompanyForm({
         <TextField name="email" label="Correo" type="email" defaultValue={tenant.email ?? ''} />
         <TextField name="address" label="Dirección" defaultValue={tenant.address ?? ''} className="md:col-span-2" />
         <TextField name="currency" label="Moneda" required defaultValue={tenant.currency} maxLength={3} />
-        <TextField name="timezone" label="Zona horaria" required defaultValue={tenant.timezone} />
+        <TextField name="timezone" label="Zona horaria" required defaultValue={tenant.timezone} hint="Define la hora de facturación y de cortes. Ej.: America/Santo_Domingo" />
         <TextField
           name="invoicePrefix"
           label="Prefijo de facturas"

@@ -7,11 +7,10 @@ import { paymentMethodOptions } from '@/lib/labels'
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>
 
-export function GenerateInvoicesForm({ action, defaultPeriod }: { action: Action; defaultPeriod: string }) {
+export function GenerateInvoicesForm({ action }: { action: Action }) {
   return (
-    <ActionForm action={action} className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-end">
-      <TextField name="period" label="Mes a facturar" type="month" required defaultValue={defaultPeriod} className="sm:w-56" />
-      <SubmitButton>Generar facturas del mes</SubmitButton>
+    <ActionForm action={action} className="space-y-0">
+      <SubmitButton variant="outline">Facturar ciclo vigente ahora</SubmitButton>
     </ActionForm>
   )
 }

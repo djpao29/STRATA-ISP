@@ -126,7 +126,7 @@ function describeHttpError(status: number, body: string): RouterOSError {
 
 function rawRequest(
   conn: RouterConnection,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   query?: Record<string, string>,
   body?: unknown
@@ -207,6 +207,37 @@ export async function rosRequest<T = unknown>(
       }
     }
   })
+}
+
+/**
+ * ESCRITURAS permitidas, únicamente para cortes y reconexiones de clientes. Lista cerrada:
+ * cualquier otra ruta, método o campo se rechaza aquí, antes de llegar al router.
+ */
+const ID = String.raw`\*[0-9A-Fa-f]+`
+const WRITE_RULES: Array<{ method: 'PUT' | 'PATCH' | 'DELETE'; path: RegExp; fields?: string[] }> = [
+  // Habilitar / deshabilitar el usuario PPP del cliente.
+  { method: 'PATCH', path: new RegExp(`^/ppp/secret/${ID}$`), fields: ['disabled'] },
+  // Cerrar la sesión PPP activa (para que el corte sea inmediato).
+  { method: 'DELETE', path: new RegExp(`^/ppp/active/${ID}$`) },
+  // Agregar / quitar la IP del cliente de la lista de cortes.
+  { method: 'PUT', path: /^\/ip\/firewall\/address-list$/, fields: ['list', 'address', 'comment'] },
+  { method: 'DELETE', path: new RegExp(`^/ip/firewall/address-list/${ID}$`) },
+]
+
+export async function rosWrite<T = unknown>(
+  conn: RouterConnection,
+  method: 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: Record<string, string>
+): Promise<T> {
+  const rule = WRITE_RULES.find((r) => r.method === method && r.path.test(path))
+  if (!rule) throw new RouterOSError(`Operación no permitida: ${method} ${path}`, 'bad_request')
+  const extra = Object.keys(body ?? {}).filter((k) => !rule.fields?.includes(k))
+  if (extra.length) throw new RouterOSError(`Campos no permitidos en ${method} ${path}: ${extra.join(', ')}`, 'bad_request')
+
+  const key = `${conn.host}:${conn.port}:${conn.username}`
+  // Sin reintento automático aquí: la cola de acciones decide cuándo reintentar.
+  return enqueue(key, async () => (await rawRequest(conn, method, path, undefined, body)) as T)
 }
 
 export function rosGet<T = unknown>(conn: RouterConnection, path: string, proplist?: string[], filters?: Record<string, string>) {

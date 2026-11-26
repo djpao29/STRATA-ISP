@@ -7,6 +7,8 @@ export const MODULE_ROLES = {
   customersWrite: ['ADMIN', 'MANAGER', 'BILLING'],
   plans: ['ADMIN', 'MANAGER'],
   billing: ['ADMIN', 'MANAGER', 'BILLING'],
+  zones: ['ADMIN', 'MANAGER', 'BILLING'],
+  zonesWrite: ['ADMIN', 'MANAGER'],
   payments: ['ADMIN', 'MANAGER', 'BILLING'],
   network: ['ADMIN', 'MANAGER', 'TECHNICIAN'],
   routers: ['ADMIN', 'MANAGER', 'TECHNICIAN'],

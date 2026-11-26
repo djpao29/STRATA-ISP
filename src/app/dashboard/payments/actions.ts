@@ -7,6 +7,7 @@ import { requireActionUser } from '@/lib/session'
 import { audit } from '@/lib/audit'
 import { toActionError, type ActionState } from '@/lib/actions'
 import { refreshInvoiceStatus } from '@/lib/billing'
+import { processSoon, reconcileCustomer } from '@/lib/zones/network'
 
 /** Aprueba o rechaza un pago. Rechazar un pago aprobado lo revierte y la factura vuelve a quedar pendiente. */
 export async function reviewPayment(_: ActionState, formData: FormData): Promise<ActionState> {
@@ -26,10 +27,16 @@ export async function reviewPayment(_: ActionState, formData: FormData): Promise
     })
     await audit({ tenantId: user.tenantId, userId: user.id, action: `payment.${decision.toLowerCase()}`, entity: 'Payment', entityId: id })
 
+    // Al aprobar, reconectar si ya no hay deuda que justifique el corte.
+    const reconnected = decision === 'APPROVED' ? await reconcileCustomer(payment.customerId) : false
+    if (reconnected) processSoon(payment.customerId)
     revalidatePath('/dashboard/payments')
     if (payment.invoiceId) revalidatePath(`/dashboard/billing/${payment.invoiceId}`)
     revalidatePath('/dashboard/billing')
-    return { ok: true, message: decision === 'APPROVED' ? 'Pago aprobado' : 'Pago rechazado' }
+    return {
+      ok: true,
+      message: decision === 'APPROVED' ? (reconnected ? 'Pago aprobado · cliente reconectado' : 'Pago aprobado') : 'Pago rechazado',
+    }
   } catch (error) {
     return toActionError(error)
   }

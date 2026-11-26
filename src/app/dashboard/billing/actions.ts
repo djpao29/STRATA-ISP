@@ -7,8 +7,9 @@ import { prisma } from '@/lib/prisma'
 import { requireActionUser } from '@/lib/session'
 import { audit } from '@/lib/audit'
 import { formToObject, money, toActionError, type ActionState } from '@/lib/actions'
-import { generateMonthlyInvoices, nextInvoiceNumber, paidAmount, refreshInvoiceStatus } from '@/lib/billing'
-import { parsePeriod, periodLabel } from '@/lib/billing-rules'
+import { nextInvoiceNumber, paidAmount, refreshInvoiceStatus } from '@/lib/billing'
+import { runZoneBilling } from '@/lib/zones/billing'
+import { processSoon, reconcileCustomer } from '@/lib/zones/network'
 
 const dateInput = z
   .string({ required_error: 'Obligatorio' })
@@ -44,19 +45,18 @@ export async function createInvoice(_: ActionState, formData: FormData): Promise
   redirect(`/dashboard/billing/${id}`)
 }
 
-export async function generateInvoices(_: ActionState, formData: FormData): Promise<ActionState> {
+/** Ejecuta ahora la facturación del ciclo vigente de cada zona activa (incluye zonas con facturación manual). */
+export async function generateInvoices(_: ActionState): Promise<ActionState> {
   try {
     const user = await requireActionUser('billing')
-    const period = parsePeriod(z.string({ required_error: 'Elige el mes' }).parse(formData.get('period') || undefined))
-    const result = await generateMonthlyInvoices(user.tenantId, period)
-    await audit({ tenantId: user.tenantId, userId: user.id, action: 'invoice.generate', entity: 'Invoice', details: { period: period.toISOString(), ...result } })
+    const results = await runZoneBilling(user.tenantId, { includeManual: true })
+    await audit({ tenantId: user.tenantId, userId: user.id, action: 'invoice.generate', entity: 'Invoice', details: { results } })
     revalidatePath('/dashboard/billing')
-    if (result.services === 0) {
-      return { ok: true, message: 'No hay servicios activos de clientes activos para facturar.' }
-    }
+    revalidatePath('/dashboard/zones')
+    if (results.length === 0) return { ok: true, message: 'No hay zonas activas.' }
     return {
       ok: true,
-      message: `${periodLabel(period)}: ${result.created} facturas creadas, ${result.skipped} ya existían.`,
+      message: results.map((r) => `${r.zone} (ciclo ${r.cycle}): ${r.created} nuevas, ${r.skipped} ya facturadas`).join(' · '),
     }
   } catch (error) {
     return toActionError(error)
@@ -117,10 +117,13 @@ export async function registerPayment(invoiceId: string, _: ActionState, formDat
       return p
     })
     await audit({ tenantId: user.tenantId, userId: user.id, action: 'payment.create', entity: 'Payment', entityId: payment.id, details: { invoiceId, amount: data.amount } })
+    // Reconexión automática si el pago salda la deuda que causó el corte.
+    const reconnected = await reconcileCustomer(invoice.customerId)
+    if (reconnected) processSoon(invoice.customerId)
     revalidatePath(`/dashboard/billing/${invoiceId}`)
     revalidatePath('/dashboard/billing')
     revalidatePath('/dashboard/payments')
-    return { ok: true, message: 'Pago registrado' }
+    return { ok: true, message: reconnected ? 'Pago registrado · cliente reconectado' : 'Pago registrado' }
   } catch (error) {
     return toActionError(error)
   }

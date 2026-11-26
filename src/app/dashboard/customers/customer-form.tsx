@@ -2,17 +2,19 @@
 
 import type { Customer } from '@prisma/client'
 import { ActionForm, SubmitButton } from '@/components/forms/action-form'
-import { FormGrid, SelectField, TextAreaField, TextField } from '@/components/forms/fields'
+import { CheckboxField, FormGrid, SelectField, TextAreaField, TextField } from '@/components/forms/fields'
 import type { ActionState } from '@/lib/actions'
 import { customerStatusOptions } from '@/lib/labels'
 
 export function CustomerForm({
   action,
   customer,
+  zones,
   submitLabel,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   customer?: Customer
+  zones: Array<{ value: string; label: string }>
   submitLabel: string
 }) {
   return (
@@ -24,11 +26,17 @@ export function CustomerForm({
         <TextField name="phone" label="Teléfono" required defaultValue={customer?.phone} placeholder="0991234567" />
         <TextField name="email" label="Correo" type="email" defaultValue={customer?.email ?? ''} />
         <SelectField
-          name="status"
-          label="Estado"
-          options={customerStatusOptions}
-          defaultValue={customer?.status ?? 'PENDING'}
+          name="zoneId"
+          label="Zona de facturación"
+          required
+          options={zones}
+          placeholder="Elegir zona…"
+          defaultValue={customer?.zoneId ?? ''}
+          hint="Define el día de factura, el límite de pago y el día de corte"
         />
+        {!customer && (
+          <SelectField name="status" label="Estado inicial" options={customerStatusOptions.filter((o) => o.value !== 'SUSPENDED')} defaultValue="PENDING" />
+        )}
         <TextField name="address" label="Dirección" defaultValue={customer?.address ?? ''} className="md:col-span-2" />
         <TextField name="city" label="Ciudad" defaultValue={customer?.city ?? ''} />
         <TextField name="neighborhood" label="Barrio / sector" defaultValue={customer?.neighborhood ?? ''} />
@@ -41,6 +49,7 @@ export function CustomerForm({
         />
       </FormGrid>
       <TextAreaField name="notes" label="Notas internas" defaultValue={customer?.notes ?? ''} />
+      <CheckboxField name="suspendExempt" label="Exento de corte automático (nunca cortar a este cliente por falta de pago)" defaultChecked={customer?.suspendExempt ?? false} />
       <SubmitButton>{submitLabel}</SubmitButton>
     </ActionForm>
   )

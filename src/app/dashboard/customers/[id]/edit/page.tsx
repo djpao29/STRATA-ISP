@@ -12,13 +12,17 @@ export default async function EditCustomerPage({ params }: { params: { id: strin
   const user = await requireUser('customersWrite')
   const customer = await prisma.customer.findFirst({ where: { id: params.id, tenantId: user.tenantId } })
   if (!customer) notFound()
+  const zones = (await prisma.zone.findMany({ where: { tenantId: user.tenantId, isActive: true }, orderBy: { invoiceDay: 'asc' } })).map((z) => ({
+    value: z.id,
+    label: `${z.name} (factura día ${z.invoiceDay}, corte día ${z.suspendDay})`,
+  }))
 
   return (
     <div className="max-w-3xl space-y-6">
       <PageHeader title={`Editar: ${customer.firstName} ${customer.lastName}`} />
       <Card>
         <CardContent className="pt-6">
-          <CustomerForm action={updateCustomer.bind(null, customer.id)} customer={customer} submitLabel="Guardar cambios" />
+          <CustomerForm action={updateCustomer.bind(null, customer.id)} customer={customer} zones={zones} submitLabel="Guardar cambios" />
         </CardContent>
       </Card>
     </div>

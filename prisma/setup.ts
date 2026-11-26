@@ -43,6 +43,14 @@ async function main() {
     },
   })
 
+  // Zonas de facturación iniciales: Zona 15 (corte el 20) y Zona 30 (corte el 5 del mes siguiente).
+  for (const z of [
+    { name: 'Zona 15', invoiceDay: 15, dueDay: 15, suspendDay: 20 },
+    { name: 'Zona 30', invoiceDay: 30, dueDay: 30, suspendDay: 5 },
+  ]) {
+    await prisma.zone.create({ data: { ...z, tenantId: tenant.id } })
+  }
+
   await prisma.user.create({
     data: {
       email,

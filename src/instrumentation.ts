@@ -7,5 +7,8 @@ export async function register() {
     // Recolector de monitoreo de los MikroTik.
     const { startMonitoring } = await import('@/lib/monitoring/scheduler')
     startMonitoring()
+    // Facturación por zonas, cortes y reconexiones automáticas.
+    const { startJobs } = await import('@/lib/jobs/scheduler')
+    startJobs()
   }
 }

@@ -20,7 +20,17 @@ export async function updateCompany(_: ActionState, formData: FormData): Promise
         phone: z.string().max(30).optional(),
         email: z.string().email('Correo inválido').optional(),
         currency: z.string().regex(/^[A-Z]{3}$/, 'Código ISO de 3 letras (USD)'),
-        timezone: z.string().max(60),
+        timezone: z
+          .string({ required_error: 'Obligatorio' })
+          .max(60)
+          .refine((tz) => {
+            try {
+              new Intl.DateTimeFormat('en', { timeZone: tz })
+              return true
+            } catch {
+              return false
+            }
+          }, 'Zona horaria inválida. Ejemplos: America/Santo_Domingo, America/Guayaquil, America/Bogota'),
         invoicePrefix: z.string().regex(/^[A-Z0-9-]{1,10}$/, 'Mayúsculas, números o guion (máx. 10)'),
         dueDays: z.coerce.number().int().min(0).max(90),
       })
