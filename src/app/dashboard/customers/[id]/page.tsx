@@ -20,6 +20,8 @@ import { localNow as localNowIn } from '@/lib/dates'
 import { cycleInfo, lastCycleStart, nextCycleStart } from '@/lib/zones/cycle'
 import { formatCustomerCode } from '@/lib/zones/billing'
 import { formatDateTime } from '@/lib/format'
+import { getOltSettings } from '@/lib/olt/service'
+import { OnuStatus, RxPower, pon, AUTH_LABEL } from '../../olt/shared'
 
 export default async function CustomerDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { alta?: string; altaError?: string } }) {
   const user = await requireUser('customers')
@@ -33,6 +35,7 @@ export default async function CustomerDetailPage({ params, searchParams }: { par
       zone: true,
       networkActions: { orderBy: { createdAt: 'desc' }, take: 15, include: { router: { select: { name: true } } } },
       devices: { orderBy: { createdAt: 'asc' } },
+      onus: { include: { olt: { select: { name: true, frame: true } }, napBox: { select: { name: true } }, speedPlan: { select: { name: true } } } },
     },
   })
   if (!customer) notFound()
@@ -51,6 +54,7 @@ export default async function CustomerDetailPage({ params, searchParams }: { par
   })
 
   const canWrite = can(user.role, 'customersWrite')
+  const oltSettings = await getOltSettings(user.tenantId)
   const currency = user.tenant.currency
   const pendingBalance = await prisma.invoice.aggregate({
     where: { customerId: customer.id, status: { in: ['PENDING', 'OVERDUE'] } },
@@ -308,6 +312,49 @@ export default async function CustomerDetailPage({ params, searchParams }: { par
               plans={plans.map((p) => ({ value: p.id, kind: p.kind, label: `${p.name} · ${p.kind === 'PPPOE' ? 'PPPoE' : 'Simple Queue'} · ${p.download}/${p.upload} Mbps · ${formatCurrency(p.price, currency)}` }))}
               routers={routers.map((r) => ({ value: r.id, label: `${r.name} (${r.host})` }))}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {customer.onus.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Fibra (ONU)</CardTitle>
+            {can(user.role, 'olt') && (
+              <Link href={`/dashboard/olt/onus?q=${encodeURIComponent(customer.onus[0].serial)}`} className="text-sm text-blue-700 hover:underline">
+                Ver en OLT
+              </Link>
+            )}
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y text-sm">
+              {customer.onus.map((o) => (
+                <li key={o.id} className="flex flex-wrap items-center gap-x-5 gap-y-1 py-2">
+                  <span className="font-mono text-xs font-semibold">{o.serial}</span>
+                  <span>
+                    {o.olt.name}{' '}
+                    {o.authState === 'AUTHORIZED' && <span className="font-mono text-xs text-muted-foreground">{pon(o.olt.frame, o.slot, o.port, o.onuIndex)}</span>}
+                  </span>
+                  {o.authState === 'AUTHORIZED' ? (
+                    o.inOlt ? <OnuStatus status={o.status} /> : <span className="text-xs text-muted-foreground">No aparece en la OLT</span>
+                  ) : (
+                    <span className={o.authState === 'FAILED' ? 'text-xs font-semibold text-red-700' : 'text-xs text-amber-700'}>
+                      {AUTH_LABEL[o.authState]}
+                      {o.authError ? ` — ${o.authError}` : ''}
+                    </span>
+                  )}
+                  {o.authState === 'AUTHORIZED' && <RxPower value={o.rxPower} low={oltSettings.lowSignal} critical={oltSettings.criticalSignal} />}
+                  {o.speedPlan && <span className="text-xs text-muted-foreground">{o.speedPlan.name}</span>}
+                  {o.napBox && (
+                    <span className="text-xs text-muted-foreground">
+                      NAP {o.napBox.name}
+                      {o.napPort ? ` · puerto ${o.napPort}` : ''}
+                    </span>
+                  )}
+                  {o.lastSeenAt && <span className="text-xs text-muted-foreground">leída {formatDateTime(o.lastSeenAt, user.tenant.timezone)}</span>}
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

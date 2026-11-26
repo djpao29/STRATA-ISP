@@ -77,12 +77,14 @@ const onboardingSchema = z.object({
   discountNote: optionalText(120),
   accessType: z.enum(['FIBER', 'ANTENNA']).optional(),
   accessPoint: optionalText(100),
-  onuId: z.string().optional(),
+  /** "onu:<id>" (ONU autorizada libre) o "disc:<id>" (detectada sin autorizar). */
+  onuChoice: z.string().regex(/^(onu|disc):[\w-]+$/, 'ONU inválida').optional(),
   newOnu: z.literal('on').optional(),
   onuOltId: z.string().optional(),
-  onuSerial: z.string().max(40).regex(/^[0-9A-Za-z-]{4,40}$/, 'Serial inválido').optional(),
-  onuSlot: z.coerce.number().int().min(0).max(255).optional(),
-  onuPort: z.coerce.number().int().min(0).max(255).optional(),
+  onuSerial: z.string().regex(/^[A-Za-z0-9]{8,16}$/, 'Serial GPON de 8 a 16 caracteres (ej. HWTC1A2B3C4D)').optional(),
+  oltSpeedPlanId: z.string().optional(),
+  napBoxId: z.string().optional(),
+  napPort: z.coerce.number().int().min(1).max(128).optional(),
   syncRouter: z.enum(['on', 'off']).default('on'),
   deviceModel: optionalText(60),
   invoiceNow: z.literal('on').optional(),
@@ -130,10 +132,17 @@ export async function createCustomer(_: ActionState, formData: FormData): Promis
         : undefined,
       deviceModel: o.deviceModel ?? null,
       onu:
-        o.accessType === 'FIBER'
-          ? o.newOnu
-            ? { create: { oltId: o.onuOltId!, serial: o.onuSerial!, slot: o.onuSlot ?? 0, port: o.onuPort ?? 0 } }
-            : { existingId: o.onuId ?? null }
+        o.accessType === 'FIBER' && (o.newOnu || o.onuChoice)
+          ? {
+              ...(o.newOnu
+                ? { preauthorize: { oltId: o.onuOltId!, serial: o.onuSerial! } }
+                : o.onuChoice!.startsWith('disc:')
+                  ? { discoveryId: o.onuChoice!.slice(5) }
+                  : { existingId: o.onuChoice!.slice(4) }),
+              speedPlanId: o.oltSpeedPlanId ?? null,
+              napBoxId: o.napBoxId ?? null,
+              napPort: o.napPort ?? null,
+            }
           : undefined,
       invoice: o.invoiceNow && plan ? { mode: o.invoiceMode } : null,
     })
@@ -143,15 +152,16 @@ export async function createCustomer(_: ActionState, formData: FormData): Promis
       action: 'customer.create',
       entity: 'Customer',
       entityId: r.customer.id,
-      details: { serviceId: r.serviceId, invoice: r.invoice?.number ?? null, network: r.network?.message ?? null },
+      details: { serviceId: r.serviceId, invoice: r.invoice?.number ?? null, network: r.network?.message ?? null, fiber: r.fiber?.message ?? null },
     })
     const notes = [
       r.invoice ? `Factura ${r.invoice.number} generada.` : null,
       r.network?.message ?? null,
+      r.fiber?.message ?? null,
     ].filter(Boolean)
     const q = new URLSearchParams()
     if (notes.length) q.set('alta', notes.join(' '))
-    if (r.network && !r.network.ok) q.set('altaError', '1')
+    if ((r.network && !r.network.ok) || (r.fiber && !r.fiber.ok)) q.set('altaError', '1')
     target = `/dashboard/customers/${r.customer.id}${q.toString() ? `?${q}` : ''}`
   } catch (error) {
     return toActionError(error)

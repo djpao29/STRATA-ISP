@@ -10,6 +10,7 @@ import { connectionFor } from '@/lib/mikrotik/connection'
 import { ensureClientQueue, ensurePppProfile, ensurePppSecret } from '@/lib/mikrotik/plans'
 import type { RosRecord } from '@/lib/mikrotik/parse'
 import { getMonitoringSettings } from '@/lib/monitoring/settings'
+import { authorizeOnu } from '@/lib/olt/service'
 
 const DAY = 86_400_000
 
@@ -62,7 +63,20 @@ export type NewCustomerInput = {
     syncRouter: boolean
   }
   deviceModel?: string | null
-  onu?: { existingId?: string | null; create?: { oltId: string; serial: string; slot: number; port: number } | null }
+  /**
+   * Fibra:
+   * - existingId: ONU ya autorizada en la OLT y libre → se vincula.
+   * - discoveryId: ONU que la OLT detecta sin autorizar → se autoriza al guardar.
+   * - preauthorize: serial nuevo → se autoriza sola cuando la OLT la detecte (o al guardar, si ya la detecta).
+   */
+  onu?: {
+    existingId?: string | null
+    discoveryId?: string | null
+    preauthorize?: { oltId: string; serial: string } | null
+    speedPlanId?: string | null
+    napBoxId?: string | null
+    napPort?: number | null
+  }
   invoice?: { mode: 'prorated' | 'full' } | null
 }
 
@@ -78,15 +92,27 @@ export async function createCustomerWithService(input: NewCustomerInput) {
   const router = input.service?.routerId ? await prisma.router.findFirst({ where: { id: input.service.routerId, tenantId } }) : null
   if (input.service?.routerId && !router) throw new Error('El router elegido no existe.')
 
+  // ONU: se resuelve antes de guardar qué hay que hacer en la OLT.
+  let onuPlan: { kind: 'link'; id: string } | { kind: 'authorize' | 'preauthorize'; oltId: string; serial: string; slot: number; port: number } | null = null
   if (input.onu?.existingId) {
     const onu = await prisma.oNU.findFirst({ where: { id: input.onu.existingId, olt: { tenantId } } })
     if (!onu) throw new Error('La ONU elegida no existe.')
     if (onu.customerId) throw new Error('La ONU elegida ya está asignada a otro cliente.')
+    onuPlan = { kind: 'link', id: onu.id }
+  } else if (input.onu?.discoveryId) {
+    const d = await prisma.onuDiscovery.findFirst({ where: { id: input.onu.discoveryId, active: true, olt: { tenantId } } })
+    if (!d) throw new Error('La ONU elegida ya no figura como sin autorizar. Actualiza la página.')
+    onuPlan = { kind: 'authorize', oltId: d.oltId, serial: d.serial, slot: d.slot, port: d.port }
+  } else if (input.onu?.preauthorize) {
+    const { oltId } = input.onu.preauthorize
+    const serial = input.onu.preauthorize.serial.toUpperCase()
+    if (!(await prisma.oLT.findFirst({ where: { id: oltId, tenantId } }))) throw new Error('La OLT elegida no existe.')
+    if (await prisma.oNU.findFirst({ where: { serial, olt: { tenantId } } })) throw new Error(`La ONU ${serial} ya está registrada en el sistema.`)
+    const d = await prisma.onuDiscovery.findFirst({ where: { oltId, serial, active: true } })
+    onuPlan = d ? { kind: 'authorize', oltId, serial, slot: d.slot, port: d.port } : { kind: 'preauthorize', oltId, serial, slot: 0, port: 0 }
   }
-  if (input.onu?.create) {
-    const olt = await prisma.oLT.findFirst({ where: { id: input.onu.create.oltId, tenantId } })
-    if (!olt) throw new Error('La OLT elegida no existe.')
-  }
+  if (input.onu?.speedPlanId && !(await prisma.oltSpeedPlan.findFirst({ where: { id: input.onu.speedPlanId, tenantId } }))) throw new Error('El plan de velocidad no existe.')
+  if (input.onu?.napBoxId && !(await prisma.napBox.findFirst({ where: { id: input.onu.napBoxId, tenantId } }))) throw new Error('La caja NAP no existe.')
   if (input.service?.ipAddress) {
     const dup = await prisma.service.findFirst({
       where: { tenantId, ipAddress: input.service.ipAddress },
@@ -120,10 +146,30 @@ export async function createCustomerWithService(input: NewCustomerInput) {
     if (input.deviceModel) {
       await tx.customerDevice.create({ data: { tenantId, customerId: customer.id, serviceId, model: input.deviceModel, macAddress: input.service?.macAddress?.toUpperCase() ?? null } })
     }
-    if (input.onu?.existingId) {
-      await tx.oNU.update({ where: { id: input.onu.existingId }, data: { customerId: customer.id } })
-    } else if (input.onu?.create) {
-      await tx.oNU.create({ data: { ...input.onu.create, serial: input.onu.create.serial.toUpperCase(), customerId: customer.id, name: `${customer.firstName} ${customer.lastName}` } })
+    let onuId: string | null = null
+    const onuLink = {
+      customerId: customer.id,
+      speedPlanId: input.onu?.speedPlanId ?? null,
+      napBoxId: input.onu?.napBoxId ?? null,
+      napPort: input.onu?.napPort ?? null,
+    }
+    if (onuPlan?.kind === 'link') {
+      await tx.oNU.update({ where: { id: onuPlan.id }, data: onuLink })
+      onuId = onuPlan.id
+    } else if (onuPlan) {
+      const onu = await tx.oNU.create({
+        data: {
+          ...onuLink,
+          oltId: onuPlan.oltId,
+          serial: onuPlan.serial,
+          slot: onuPlan.slot,
+          port: onuPlan.port,
+          name: `${customer.firstName} ${customer.lastName}`,
+          status: 'UNKNOWN',
+          authState: onuPlan.kind === 'authorize' ? 'PENDING' : 'PREAUTHORIZED',
+        },
+      })
+      onuId = onu.id
     }
 
     let invoice: { number: string; amount: number } | null = null
@@ -155,7 +201,7 @@ export async function createCustomerWithService(input: NewCustomerInput) {
       })
       invoice = { number, amount }
     }
-    return { customer, serviceId, invoice }
+    return { customer, serviceId, invoice, onuId }
   })
 
   // Configuración en el MikroTik (después de guardar: si el router falla, el cliente queda creado).
@@ -190,5 +236,18 @@ export async function createCustomerWithService(input: NewCustomerInput) {
     }
   }
 
-  return { ...result, network }
+  // ONU: autorizar en la OLT (después de guardar: si la OLT falla, queda en «Pendientes» para reintentar).
+  let fiber: { ok: boolean; message: string } | null = null
+  if (result.onuId && onuPlan && onuPlan.kind !== 'link') {
+    if (onuPlan.kind === 'preauthorize') {
+      fiber = { ok: true, message: `ONU ${onuPlan.serial} pre-autorizada: se autorizará sola cuando la OLT la detecte.` }
+    } else {
+      const r = await authorizeOnu(result.onuId, input.userId)
+      fiber = r.ok
+        ? { ok: true, message: `ONU ${onuPlan.serial} autorizada en la OLT (ID ${r.onuId}).` }
+        : { ok: false, message: `No se pudo autorizar la ONU ${onuPlan.serial}: ${r.error.replace(/\.+$/, '')}. Quedó en OLT › Pendientes para reintentar.` }
+    }
+  }
+
+  return { ...result, network, fiber }
 }

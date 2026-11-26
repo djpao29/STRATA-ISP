@@ -10,7 +10,8 @@ import type { ActionState } from '@/lib/actions'
 import { cn } from '@/lib/utils'
 import { CustomerInfoFields } from '../customer-fields'
 
-type Option = { value: string; label: string }
+type Option = { value: string; label: string; disabled?: boolean }
+export type FiberOptions = { free: Option[]; discovered: Option[]; olts: Option[]; speedPlans: Option[]; naps: Option[] }
 export type PlanOpt = { id: string; name: string; kind: 'SIMPLE_QUEUE' | 'PPPOE'; price: number; download: number; upload: number; pppProfile: string | null }
 type Iface = { name: string; type: string; comment: string | null; running: boolean }
 type Lease = { address: string; mac: string | null; hostName: string | null; status: string | null; dynamic: boolean; comment: string | null }
@@ -35,8 +36,7 @@ export function NewCustomerForm({
   routers,
   plans,
   zones,
-  onus,
-  olts,
+  fiber,
   deviceModels,
   currency,
 }: {
@@ -44,8 +44,7 @@ export function NewCustomerForm({
   routers: Option[]
   plans: PlanOpt[]
   zones: Option[]
-  onus: Option[]
-  olts: Option[]
+  fiber: FiberOptions
   deviceModels: string[]
   currency: string
 }) {
@@ -64,6 +63,7 @@ export function NewCustomerForm({
   const [discount, setDiscount] = useState('')
   const [access, setAccess] = useState<'FIBER' | 'ANTENNA'>('FIBER')
   const [newOnu, setNewOnu] = useState(false)
+  const [onuChoice, setOnuChoice] = useState('')
   const [invoice, setInvoice] = useState(false)
   const [pppPass, setPppPass] = useState('')
 
@@ -306,26 +306,72 @@ export function NewCustomerForm({
               <div className="space-y-2">
                 {!newOnu ? (
                   <>
-                    <SelectField name="onuId" label="ONU" options={onus} placeholder="— Sin vincular ONU por ahora —" />
-                    {onus.length === 0 && <p className="text-xs text-amber-700">Sin ONUs libres — registra una con «Autorizar ONU».</p>}
-                    <button type="button" onClick={() => setNewOnu(true)} disabled={olts.length === 0} className="rounded-md border border-green-300 bg-white px-3 py-1.5 text-xs font-medium text-green-800 hover:bg-green-50 disabled:opacity-50">
+                    <div className="space-y-1.5">
+                      <label htmlFor="onuChoice" className="text-sm font-medium">
+                        ONU
+                      </label>
+                      <select id="onuChoice" name="onuChoice" value={onuChoice} onChange={(e) => setOnuChoice(e.target.value)} className={input}>
+                        <option value="">— Sin vincular ONU por ahora —</option>
+                        {fiber.discovered.length > 0 && (
+                          <optgroup label="Detectadas sin autorizar (se autorizan al guardar)">
+                            {fiber.discovered.map((o) => (
+                              <option key={o.value} value={o.value} disabled={o.disabled}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {fiber.free.length > 0 && (
+                          <optgroup label="Autorizadas sin cliente">
+                            {fiber.free.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      {onuChoice.startsWith('disc:') && <p className="text-xs text-green-700">Al guardar se autoriza en la OLT con el plan de velocidad elegido.</p>}
+                    </div>
+                    {fiber.free.length + fiber.discovered.length === 0 && (
+                      <p className="text-xs text-amber-700">Sin ONUs libres ni detectadas — usa «Autorizar ONU» con el serial de la etiqueta.</p>
+                    )}
+                    <button type="button" onClick={() => { setNewOnu(true); setOnuChoice('') }} disabled={fiber.olts.length === 0} className="rounded-md border border-green-300 bg-white px-3 py-1.5 text-xs font-medium text-green-800 hover:bg-green-50 disabled:opacity-50">
                       Autorizar ONU
                     </button>
-                    {olts.length === 0 && <p className="text-xs text-muted-foreground">Registra primero una OLT en el menú OLT.</p>}
+                    {fiber.olts.length === 0 && <p className="text-xs text-muted-foreground">Registra primero una OLT en el menú OLT.</p>}
                   </>
                 ) : (
                   <div className="space-y-2 rounded-md border bg-gray-50 p-3">
                     <input type="hidden" name="newOnu" value="on" />
-                    <SelectField name="onuOltId" label="OLT" required options={olts} defaultValue={olts[0]?.value} />
-                    <TextField name="onuSerial" label="Serial de la ONU" required maxLength={40} placeholder="HWTC1234ABCD" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <TextField name="onuSlot" label="Slot" type="number" min={0} defaultValue={0} />
-                      <TextField name="onuPort" label="Puerto PON" type="number" min={0} defaultValue={0} />
-                    </div>
-                    <p className="text-xs text-muted-foreground">Se registra en el inventario de la OLT y queda vinculada al cliente.</p>
+                    <SelectField name="onuOltId" label="OLT" required options={fiber.olts} defaultValue={fiber.olts[0]?.value} />
+                    <TextField name="onuSerial" label="Serial GPON de la ONU" required maxLength={16} placeholder="HWTC1A2B3C4D" className="[&_input]:font-mono [&_input]:uppercase" />
+                    <p className="text-xs text-muted-foreground">
+                      Si la OLT ya la detecta, se autoriza al guardar; si todavía no está conectada, queda pre-autorizada y se autoriza sola cuando aparezca.
+                    </p>
                     <button type="button" onClick={() => setNewOnu(false)} className="text-xs text-red-700 hover:underline">
                       Cancelar
                     </button>
+                  </div>
+                )}
+                {(newOnu || onuChoice) && (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <SelectField name="oltSpeedPlanId" label="Plan de velocidad OLT" options={fiber.speedPlans} placeholder="Perfiles de la OLT" className="sm:col-span-3" />
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label htmlFor="napBoxId" className="text-sm font-medium">
+                        Caja NAP
+                      </label>
+                      <select id="napBoxId" name="napBoxId" defaultValue="" className={input}>
+                        <option value="">—</option>
+                        {fiber.naps.map((n) => (
+                          <option key={n.value} value={n.value} disabled={n.disabled}>
+                            {n.label}
+                            {n.disabled ? ' · llena' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <TextField name="napPort" label="Puerto" type="number" min={1} max={128} />
                   </div>
                 )}
               </div>
