@@ -258,7 +258,7 @@ function uptime(v: Varbind['value'] | undefined) {
 /** Lectura por consola (VSOL, Hioso, C-Data, BDCOM). El tiempo encendida sale por SNMP si hay comunidad. */
 async function readConsoleBrand(c: DriverConfig): Promise<OltReading> {
   if (!c.cli) throw new Error('Esta marca se lee por consola: configura usuario y clave de Telnet/SSH.')
-  const { onus, discovered } = await readByConsole(c.cli, c.brand, c.readTemplate ?? null, c.autofindTemplate ?? null)
+  const { onus, discovered } = await readByConsole(c.cli, c.brand, c.readTemplate ?? null, c.autofindTemplate ?? null, c.frame)
   const up = c.snmp ? await get(c.snmp, [SYS_UPTIME]).catch(() => [null]) : [null]
   return { uptimeSec: uptime(up[0]), temperature: null, onus, discovered }
 }
@@ -314,16 +314,9 @@ export const AUTH_TEMPLATES: Record<OltBrand, string> = {
     'exit',
     'write',
   ].join('\n'),
-  HIOSO: [
-    'enable',
-    'configure terminal',
-    'interface epon {frame}/{port}',
-    'onu bind {onuId} mac {mac}',
-    'onu {onuId} description {desc}',
-    'exit',
-    'exit',
-    'write',
-  ].join('\n'),
+  // Hioso EPON (verificado en el equipo): autoriza por MAC en la lista blanca del puerto, que aplica
+  // cuando el puerto usa «auth mode mac». Con «auth mode disable» las ONUs se registran solas.
+  HIOSO: ['enable', 'configure terminal', 'interface epon {frame}/{port}', 'whitelist add {mac}', 'exit', 'exit'].join('\n'),
   CDATA: [
     'enable',
     'config',

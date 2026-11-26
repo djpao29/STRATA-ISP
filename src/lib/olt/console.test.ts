@@ -69,4 +69,8 @@ describe('consola de prueba', () => {
     for (const c of ['show onu info', 'display ont info 0 all', 'enable', 'configure terminal', 'interface epon 0/1', 'terminal length 0', 'show ?']) expect(isReadOnlyCommand(c)).toBe(true)
     for (const c of ['onu add 1 1 mac aa', 'reboot', 'write', 'no onu 1', 'delete flash:', 'username x password y', '']) expect(isReadOnlyCommand(c)).toBe(false)
   })
+  it('la ayuda «?» solo sobre consultas (en Hioso el Enter ejecuta la línea)', () => {
+    for (const c of ['?', 'show onu ?', 'show attempt onu ?']) expect(isReadOnlyCommand(c)).toBe(true)
+    for (const c of ['whitelist add 78:5c:72:00:11:22 ?', 'auth mode ?', 'whitelist ?', 'interface epon 0/1 ?', 'onu ?']) expect(isReadOnlyCommand(c)).toBe(false)
+  })
 })

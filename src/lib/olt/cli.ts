@@ -28,6 +28,7 @@ const PROMPT = /(^|[\r\n])[^\r\n]{0,80}[>#]\s*$/
 const LOGIN = /(user ?name|login)\s*:\s*$/i
 const PASSWORD = /password\s*:\s*$/i
 const MORE = /(-{2,}\s*more[^\r\n]*$|--more--\s*$|press any key[^\r\n]*$)/i
+const ENTER_MORE = /-*\s*(enter|press enter) key to continue\s*-*\s*$/i
 // Huawei pregunta parámetros opcionales con "{ <cr>|... }:" → Enter acepta.
 const HUAWEI_CR = /\{\s*<cr>[^}]*\}\s*:\s*$/i
 const CONFIRM = /\(y\/n\)\s*\[?[yn]?\]?\s*:?\s*$/i
@@ -120,6 +121,12 @@ export async function runCli(t: CliTarget, commands: string[], opts: { stopOnErr
     if (MORE.test(buffer)) {
       buffer = buffer.replace(MORE, '')
       tr.write(' ')
+      return
+    }
+    // Hioso y otras EPON paginan con "--- Enter Key To Continue ----": se sigue con Enter.
+    if (ENTER_MORE.test(buffer)) {
+      buffer = buffer.replace(ENTER_MORE, '')
+      tr.write('\r\n')
       return
     }
     if (HUAWEI_CR.test(buffer)) {

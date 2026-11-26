@@ -118,16 +118,46 @@ export function parseConsoleOnus(output: string): OnuReading[] {
         : reading
     )
   }
+  // Señal por ONU en bloques: "show onu optical-ddm epon 0/1 5" … "RxPower : -19.59 dBm" (Hioso y similares).
+  for (const m of output.matchAll(/optical-ddm\s+epon\s+(\d+)\/(\d+)\s+(\d+)\s*\r?\n([\s\S]*?)(?=\n[^\n]*[>#]\s|$)/gi)) {
+    const rx = /rx\s*power\s*:\s*(-?\d{1,2}(?:\.\d+)?)/i.exec(m[4])
+    if (!rx) continue
+    const slot = Number(m[1])
+    const port = Number(m[2])
+    const onuId = Number(m[3])
+    for (const [k, o] of byId) if (o.slot === slot && o.port === port && o.onuId === onuId) byId.set(k, { ...o, rxPower: Number(rx[1]) })
+  }
   return [...byId.values()]
 }
 
-/** ONUs sin autorizar de la salida de consola. */
+/** Líneas de plantilla «@onu …» que se ejecutan una vez por cada ONU en línea. */
+export function perOnuCommands(template: string, onus: Array<Pick<OnuReading, 'slot' | 'port' | 'onuId' | 'status'>>, frame: number, max = 300) {
+  const per = lines(template)
+    .filter((l) => l.startsWith('@onu '))
+    .map((l) => l.slice(5).trim())
+  if (!per.length) return []
+  const out: string[] = []
+  for (const o of onus.filter((x) => x.status === 'ACTIVE').slice(0, max)) {
+    for (const t of per) out.push(t.replace(/\{frame\}/g, String(frame)).replace(/\{slot\}/g, String(o.slot)).replace(/\{port\}/g, String(o.port)).replace(/\{onuId\}/g, String(o.onuId)))
+  }
+  return out
+}
+
+/** Puerto PON en el que está la sesión según el prompt: "EPON(epon_0/1)#", "(config-if-epon0/1)#", "interface epon 0/1". */
+function promptPort(line: string) {
+  const m = /\((?:config-if-)?[eg]?pon[_ ]?(\d+)\/(\d+)\)#/i.exec(line) ?? /\binterface\s+[eg]?pon\s*(\d+)\/(\d+)\s*$/i.exec(line)
+  return m ? { slot: Number(m[1]), port: Number(m[2]) } : null
+}
+
+/** ONUs sin autorizar de la salida de consola (si la línea no trae el puerto, se usa el del prompt). */
 export function parseConsoleAutofind(output: string): Discovery[] {
   const out = new Map<string, Discovery>()
+  let ctx: { slot: number; port: number } | null = null
   for (const line of output.split(/\r?\n/)) {
+    ctx = promptPort(line) ?? ctx
     const id = findId(line)
     if (!id) continue
-    const pos = findPosition(line.replace(id.raw, ' '))
+    const pos = findPosition(line.replace(id.raw, ' ')) ?? ctx
     if (pos) out.set(id.id, { slot: pos.slot, port: pos.port, serial: id.id, equipment: null })
   }
   return [...out.values()]
@@ -144,9 +174,33 @@ export const CONSOLE_DEFAULTS: Partial<Record<OltBrand, { read: string; autofind
     read: ['enable', 'terminal length 0', 'configure terminal', 'show onu info', 'exit'].join('\n'),
     autofind: ['enable', 'configure terminal', 'show onu auto-find', 'exit'].join('\n'),
   },
+  // Verificado con una Hioso EPON real (prompt "EPON#", 4 puertos PON, paginación "Enter Key To Continue").
   HIOSO: {
-    read: ['enable', 'terminal length 0', 'show onu info'].join('\n'),
-    autofind: ['enable', 'show onu unauth'].join('\n'),
+    read: [
+      'enable',
+      'show onu info epon 0/1 all',
+      'show onu info epon 0/2 all',
+      'show onu info epon 0/3 all',
+      'show onu info epon 0/4 all',
+      '@onu show onu optical-ddm epon {frame}/{port} {onuId}',
+    ].join('\n'),
+    autofind: [
+      'enable',
+      'configure terminal',
+      'interface epon 0/1',
+      'show attempt onu',
+      'exit',
+      'interface epon 0/2',
+      'show attempt onu',
+      'exit',
+      'interface epon 0/3',
+      'show attempt onu',
+      'exit',
+      'interface epon 0/4',
+      'show attempt onu',
+      'exit',
+      'exit',
+    ].join('\n'),
   },
   CDATA: {
     read: ['enable', 'config', 'show ont info all'].join('\n'),
@@ -165,12 +219,20 @@ const lines = (t: string) =>
     .filter(Boolean)
 
 /** Lee una OLT por consola con sus plantillas (o las de su marca). */
-export async function readByConsole(cli: CliTarget, brand: OltBrand, readTemplate: string | null, autofindTemplate: string | null) {
+export async function readByConsole(cli: CliTarget, brand: OltBrand, readTemplate: string | null, autofindTemplate: string | null, frame = 0) {
   const defaults = CONSOLE_DEFAULTS[brand]
   const read = readTemplate?.trim() || defaults?.read
   if (!read) throw new Error('Configura los comandos de lectura de esta OLT (Configuración › Comandos de lectura).')
-  const r = await runCli(cli, lines(read), { stopOnError: false })
-  const onus = parseConsoleOnus(r.all)
+  // Las líneas «@onu …» se ejecutan después, una vez por cada ONU en línea (p. ej. la señal óptica).
+  const base = lines(read).filter((l) => !l.startsWith('@onu '))
+  const r = await runCli(cli, base, { stopOnError: false })
+  let onus = parseConsoleOnus(r.all)
+  const extra = perOnuCommands(read, onus, frame)
+  if (extra.length) {
+    const head = base.filter((l) => /^(enable|en)$/i.test(l))
+    const e = await runCli(cli, [...head, ...extra], { stopOnError: false })
+    onus = parseConsoleOnus(`${r.all}\n${e.all}`)
+  }
   const auto = autofindTemplate?.trim() || defaults?.autofind
   let discovered: Discovery[] = []
   if (auto) {
@@ -193,13 +255,18 @@ const READ_ONLY = [
   /^(configure terminal|config|conf t|configure)$/i,
   /^interface\s+\S+(\s+\S+)?$/i,
   /^(terminal length|terminal page-break|screen-length|scroll)\b.*$/i,
-  /^\?$|\s\?$/,
   /^ping\s+\S+$/i,
 ]
+const QUERY = /^(show|display|dis|sh)\b/i
 
 export function isReadOnlyCommand(cmd: string) {
   const c = cmd.trim()
-  return c.length > 0 && c.length <= 200 && READ_ONLY.some((re) => re.test(c))
+  if (c.length === 0 || c.length > 200) return false
+  if (c === '?') return true
+  // Ayuda con «?»: en muchas OLT (p. ej. Hioso) la línea queda escrita y el Enter la EJECUTA.
+  // Por eso solo se permite sobre comandos de consulta: «show onu ?» sí, «whitelist add … ?» no.
+  if (c.endsWith('?')) return QUERY.test(c.replace(/\s*\?$/, '').trim())
+  return READ_ONLY.some((re) => re.test(c))
 }
 
 /** Ejecuta comandos de lectura y devuelve la salida completa (para ajustar las plantillas). */
