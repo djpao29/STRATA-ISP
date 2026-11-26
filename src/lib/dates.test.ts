@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { currentPeriodIn, monthStartIn, todayIn } from './dates'
+import { currentPeriodIn, instantToLocalInput, localInputToInstant, monthStartIn, todayIn } from './dates'
+
+describe('hora local ↔ instante', () => {
+  it('10:30 en Santo Domingo (UTC-4) son las 14:30 UTC, y vuelta', () => {
+    const i = localInputToInstant('2026-11-26T10:30', 'America/Santo_Domingo')
+    expect(i.toISOString()).toBe('2026-11-26T14:30:00.000Z')
+    expect(instantToLocalInput(i, 'America/Santo_Domingo')).toBe('2026-11-26T10:30')
+  })
+  it('respeta el horario de verano de otras zonas (Madrid en julio, UTC+2)', () => {
+    expect(localInputToInstant('2026-07-01T09:00', 'Europe/Madrid').toISOString()).toBe('2026-07-01T07:00:00.000Z')
+  })
+  it('rechaza formatos inválidos', () => {
+    expect(() => localInputToInstant('26/11/2026 10:30', 'UTC')).toThrow()
+  })
+})
 
 describe('todayIn', () => {
   it('a las 20:00 de Ecuador sigue siendo el mismo día (aunque en UTC ya sea el siguiente)', () => {

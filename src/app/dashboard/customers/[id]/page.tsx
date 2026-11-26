@@ -32,6 +32,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
       tickets: { orderBy: { createdAt: 'desc' }, take: 10 },
       zone: true,
       networkActions: { orderBy: { createdAt: 'desc' }, take: 15, include: { router: { select: { name: true } } } },
+      devices: { orderBy: { createdAt: 'asc' } },
     },
   })
   if (!customer) notFound()
@@ -285,6 +286,34 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
               plans={plans.map((p) => ({ value: p.id, label: `${p.name} · ${formatCurrency(p.price, currency)}` }))}
               routers={routers.map((r) => ({ value: r.id, label: `${r.name} (${r.host})` }))}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {can(user.role, 'devices') && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle>Wifi Router</CardTitle>
+            <Link href={`/dashboard/customers/devices?customerId=${customer.id}`} className="text-sm text-blue-700 hover:underline">
+              {customer.devices.length ? 'Ver claves y editar' : 'Registrar equipo'}
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {customer.devices.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin equipos registrados.</p>
+            ) : (
+              <ul className="divide-y text-sm">
+                {customer.devices.map((d) => (
+                  <li key={d.id} className="flex flex-wrap gap-x-4 gap-y-1 py-2">
+                    <span className="font-medium">{[d.brand, d.model].filter(Boolean).join(' ') || 'Equipo'}</span>
+                    {d.ssid && <span>Red: {d.ssid}</span>}
+                    {d.macAddress && <span className="font-mono text-xs">{d.macAddress}</span>}
+                    {d.managementIp && <span className="font-mono text-xs">{d.managementIp}</span>}
+                    {d.serial && <span className="text-muted-foreground">Serie {d.serial}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}

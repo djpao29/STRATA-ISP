@@ -20,6 +20,7 @@ export async function updateCompany(_: ActionState, formData: FormData): Promise
         phone: z.string().max(30).optional(),
         email: z.string().email('Correo inválido').optional(),
         currency: z.string().regex(/^[A-Z]{3}$/, 'Código ISO de 3 letras (USD)'),
+        country: z.enum(['DO', 'EC'], { required_error: 'Obligatorio' }),
         timezone: z
           .string({ required_error: 'Obligatorio' })
           .max(60)

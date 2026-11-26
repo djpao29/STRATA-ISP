@@ -14,4 +14,12 @@ describe('normalizePhone', () => {
     expect(normalizePhone('+593 99 123 4567')).toBe('593991234567')
     expect(normalizePhone('+1 (555) 010-9999')).toBe('15550109999')
   })
+
+  it('convierte números de República Dominicana', async () => {
+    const { normalizePhone } = await import('./whatsapp')
+    expect(normalizePhone('809-555-1234', 'DO')).toBe('18095551234')
+    expect(normalizePhone('(829) 555 1234', 'DO')).toBe('18295551234')
+    expect(normalizePhone('1 849 555 1234', 'DO')).toBe('18495551234')
+    expect(normalizePhone('+1 809 555 1234', 'DO')).toBe('18095551234')
+  })
 })

@@ -3,11 +3,20 @@ import { decrypt } from '@/lib/crypto'
 
 const GRAPH_URL = 'https://graph.facebook.com/v21.0'
 
-/** Normaliza un teléfono a formato internacional sin "+" (lo que pide la API). */
-export function normalizePhone(phone: string, defaultCountryCode = '593') {
+/**
+ * Normaliza un teléfono a formato internacional sin "+" (lo que pide la API), según el país de la empresa.
+ * - República Dominicana (DO): 809/829/849 + 7 dígitos → 1 + número.
+ * - Ecuador (EC): 0 + número → 593 + número.
+ */
+export function normalizePhone(phone: string, country = 'EC') {
   const digits = phone.replace(/\D/g, '')
   if (phone.trim().startsWith('+')) return digits
-  if (digits.startsWith('0')) return defaultCountryCode + digits.slice(1)
+  if (digits.startsWith('00')) return digits.slice(2)
+  if (country === 'DO') {
+    if (digits.length === 10 && /^(809|829|849)/.test(digits)) return '1' + digits
+    return digits
+  }
+  if (country === 'EC' && digits.startsWith('0')) return '593' + digits.slice(1)
   return digits
 }
 
@@ -22,7 +31,7 @@ export async function sendTemplate(params: {
   language: string
   bodyParams?: string[]
 }) {
-  const config = await prisma.whatsAppConfig.findUnique({ where: { tenantId: params.tenantId } })
+  const config = await prisma.whatsAppConfig.findUnique({ where: { tenantId: params.tenantId }, include: { tenant: { select: { country: true } } } })
   if (!config) throw new Error('WhatsApp no está configurado.')
   if (!config.isActive) throw new Error('La integración de WhatsApp está desactivada.')
 
@@ -34,7 +43,7 @@ export async function sendTemplate(params: {
     },
     body: JSON.stringify({
       messaging_product: 'whatsapp',
-      to: normalizePhone(params.to),
+      to: normalizePhone(params.to, config.tenant.country),
       type: 'template',
       template: {
         name: params.template,

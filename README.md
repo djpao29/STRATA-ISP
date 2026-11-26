@@ -90,6 +90,24 @@ router se hace desde el servidor; el navegador nunca recibe credenciales.
   normalizarse.
 - Con varias instancias de la app, deja el recolector activo solo en una: `MONITORING_ENABLED=false` en las demás.
 
+## Clientes
+
+Grupo del menú con estas secciones:
+
+| Sección | Qué hace |
+| --- | --- |
+| Lista de clientes | Alta, edición, búsqueda y ficha del cliente (servicios, zona, facturas, pagos, tickets, equipos) |
+| Notificaciones push | Campañas de WhatsApp con plantillas aprobadas por Meta a clientes con deuda, cortados, activos, todos, una zona o un cliente. Los parámetros aceptan variables ({nombre}, {saldo}, {fecha_corte}, {plan}…), vista previa con el primer destinatario, envío en segundo plano con 3 reintentos, cancelación e historial por destinatario |
+| Tráfico | Conexión, velocidad actual y consumo de cada cliente leídos de todos los MikroTik con monitoreo activo (solo lectura), incluidas las sesiones PPPoE sin cliente en el sistema |
+| Instalaciones | Agenda de instalaciones con técnico, vistas de hoy / atrasadas / completadas; al completarla el cliente pasa de pendiente a activo |
+| Mapa | Clientes con coordenadas en el mapa (OpenStreetMap), coloreados por estado, con filtros por zona y estado |
+| Mapa cobro | Clientes por situación de pago (al día, pendiente, vencido, cortado) con saldo y botón "Cobrar" |
+| Wifi Router | Ficha del router/ONU del cliente: marca, modelo, serie, MAC, IP, SSID y claves WiFi y de administración cifradas; ver una clave queda en la auditoría |
+| Avisos en pantalla | Avisos para el personal (por rol, con fechas e importancia) que salen arriba de todas las pantallas; cada usuario puede ocultar los descartables |
+
+Los teléfonos se convierten al formato internacional según el país de la empresa
+(República Dominicana: 809/829/849 → +1).
+
 ## Finanzas
 
 Grupo del menú con estas secciones:

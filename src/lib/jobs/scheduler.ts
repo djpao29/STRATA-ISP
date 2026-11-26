@@ -5,6 +5,7 @@ import { markOverdueInvoices } from '@/lib/billing'
 import { runZoneBilling } from '@/lib/zones/billing'
 import { processNetworkActions, runReconnections, runSuspensions } from '@/lib/zones/network'
 import { runPromises } from '@/lib/promises'
+import { processCampaigns } from '@/lib/notifications'
 
 /**
  * Tareas programadas del backend (no dependen de que alguien abra el panel):
@@ -75,6 +76,8 @@ async function tick(state: State) {
       const tenants = await prisma.tenant.findMany({ where: { isActive: true }, select: { id: true } })
       for (const t of tenants) await runTenantJobs(t.id)
       await processNetworkActions({ limit: 50 })
+      // Mensajes de WhatsApp que quedaron en cola o deben reintentarse.
+      await processCampaigns({ limit: 200 }).catch((e) => console.error('[tareas] notificaciones', e))
     } finally {
       await releaseLock()
     }

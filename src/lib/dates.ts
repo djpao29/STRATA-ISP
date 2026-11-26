@@ -32,6 +32,24 @@ export function localNow(timeZone: string, now = new Date()): Date {
   return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute')))
 }
 
+/**
+ * Convierte una fecha y hora LOCAL de la empresa ("2026-11-26T10:30", de un input datetime-local)
+ * al instante real (UTC). Tiene en cuenta el desfase de la zona horaria en esa fecha.
+ */
+export function localInputToInstant(value: string, timeZone: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value)
+  if (!m) throw new Error('Fecha y hora inválidas')
+  const naive = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]))
+  // Desfase de la zona en ese momento: hora local de "naive" interpretado como UTC, menos naive.
+  const offset = localNow(timeZone, new Date(naive)).getTime() - naive
+  return new Date(naive - offset)
+}
+
+/** Instante real → "AAAA-MM-DDTHH:MM" en hora local de la empresa (para inputs datetime-local). */
+export function instantToLocalInput(date: Date, timeZone: string) {
+  return localNow(timeZone, date).toISOString().slice(0, 16)
+}
+
 /** Primer día del mes actual en la zona horaria de la empresa. */
 export function monthStartIn(timeZone: string, now = new Date()): Date {
   const today = todayIn(timeZone, now)

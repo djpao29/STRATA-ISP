@@ -8,7 +8,7 @@ import { can, type Module } from '@/lib/permissions'
  * Usuario actual leído de la base (no solo del token), para que desactivar a alguien
  * o cambiarle el rol tenga efecto inmediato. Se cachea por petición.
  */
-const currentUser = cache(async () => {
+export const currentUser = cache(async () => {
   const session = await auth()
   if (!session?.user?.id) return null
   const user = await prisma.user.findUnique({

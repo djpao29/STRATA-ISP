@@ -6,6 +6,11 @@ import { useEffect, useState } from 'react'
 import type { UserRole } from '@prisma/client'
 import {
   Activity,
+  Bell,
+  ClipboardCheck,
+  MapPinned,
+  MonitorPlay,
+  Router,
   BarChart3,
   BookOpenCheck,
   ChevronDown,
@@ -46,7 +51,34 @@ const isGroup = (i: Item): i is Group => 'children' in i
 
 const menu: Item[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: 'dashboard', exact: true },
-  { title: 'Clientes', href: '/dashboard/customers', icon: Users, module: 'customers' },
+  {
+    title: 'Clientes',
+    icon: Users,
+    children: [
+      {
+        title: 'Lista de clientes',
+        href: '/dashboard/customers',
+        icon: Users,
+        module: 'customers',
+        exclude: [
+          '/dashboard/customers/notifications',
+          '/dashboard/customers/traffic',
+          '/dashboard/customers/installations',
+          '/dashboard/customers/map',
+          '/dashboard/customers/collection-map',
+          '/dashboard/customers/devices',
+          '/dashboard/customers/notices',
+        ],
+      },
+      { title: 'Notificaciones push', href: '/dashboard/customers/notifications', icon: Bell, module: 'notifications' },
+      { title: 'Tráfico', href: '/dashboard/customers/traffic', icon: Activity, module: 'monitoring' },
+      { title: 'Instalaciones', href: '/dashboard/customers/installations', icon: ClipboardCheck, module: 'installations' },
+      { title: 'Mapa', href: '/dashboard/customers/map', icon: MapPin, module: 'customers' },
+      { title: 'Mapa cobro', href: '/dashboard/customers/collection-map', icon: MapPinned, module: 'finance' },
+      { title: 'Wifi Router', href: '/dashboard/customers/devices', icon: Router, module: 'devices' },
+      { title: 'Avisos en pantalla', href: '/dashboard/customers/notices', icon: MonitorPlay, module: 'notices' },
+    ],
+  },
   { title: 'Planes', href: '/dashboard/plans', icon: Package, module: 'plans' },
   { title: 'Zonas', href: '/dashboard/zones', icon: MapPin, module: 'zones', exclude: ['/dashboard/zones/log'] },
   {

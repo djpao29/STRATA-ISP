@@ -15,7 +15,7 @@ export function CompanyForm({
   tenant,
 }: {
   action: Action
-  tenant: Pick<Tenant, 'name' | 'taxId' | 'address' | 'phone' | 'email' | 'currency' | 'timezone' | 'invoicePrefix' | 'dueDays' | 'nextInvoiceNumber'>
+  tenant: Pick<Tenant, 'name' | 'taxId' | 'address' | 'phone' | 'email' | 'country' | 'currency' | 'timezone' | 'invoicePrefix' | 'dueDays' | 'nextInvoiceNumber'>
 }) {
   return (
     <ActionForm action={action}>
@@ -25,6 +25,7 @@ export function CompanyForm({
         <TextField name="phone" label="Teléfono" defaultValue={tenant.phone ?? ''} />
         <TextField name="email" label="Correo" type="email" defaultValue={tenant.email ?? ''} />
         <TextField name="address" label="Dirección" defaultValue={tenant.address ?? ''} className="md:col-span-2" />
+        <SelectField name="country" label="País" required defaultValue={tenant.country} options={[{ value: 'DO', label: 'República Dominicana' }, { value: 'EC', label: 'Ecuador' }]} hint="Define el formato de los teléfonos para WhatsApp" />
         <TextField name="currency" label="Moneda" required defaultValue={tenant.currency} maxLength={3} />
         <TextField name="timezone" label="Zona horaria" required defaultValue={tenant.timezone} hint="Define la hora de facturación y de cortes. Ej.: America/Santo_Domingo" />
         <TextField
