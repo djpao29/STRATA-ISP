@@ -14,7 +14,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "setup": "tsx prisma/setup.ts",
-    "reset-password": "tsx prisma/reset-password.ts"
+    "reset-password": "tsx prisma/reset-password.ts",
+    "deploy": "git push origin main && ssh root@173.224.122.168 wispx-deploy"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",

@@ -260,6 +260,19 @@ usando la misma carpeta `.next`: deja uno solo, borra `.next` y vuelve a arranca
 
 **Actualizar a una versión nueva:** `git pull` y repetir el paso 2.
 
+**Despliegue en el VPS actual (173.224.122.168):** `/opt/wispx` es una copia de este repositorio. Desde el PC,
+con los cambios ya en un commit:
+
+```bash
+npm run deploy   # git push a GitHub y luego wispx-deploy en el VPS
+```
+
+`wispx-deploy` (en `/usr/local/bin` del VPS) baja `main` de GitHub, reconstruye con
+`docker-compose.prod.yml` + `docker-compose.override.yml` (puerto público 3010), aplica las migraciones
+y espera a que la app esté sana. `.env.production` y el override viven solo en el VPS y no se tocan.
+WireGuard: `wispx-wg-sync` (timer de systemd, cada minuto) regenera `/etc/wireguard/wg0.conf` con
+`prisma/wg-sync.ts`.
+
 **Copias de seguridad** (programarlas a diario, guardar fuera del servidor):
 ```bash
 docker compose -f docker-compose.prod.yml exec -T db pg_dump -U wispx wispx | gzip > backup-$(date +%F).sql.gz
