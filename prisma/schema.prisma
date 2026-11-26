@@ -3,7 +3,8 @@
 //   producción:  npm run db:deploy       (aplica las migraciones pendientes)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
@@ -110,23 +111,24 @@ enum ONUStatus {
 }
 
 model Tenant {
-  id                String   @id @default(cuid())
-  name              String
-  country           String   @default("EC")
-  currency          String   @default("USD")
-  timezone          String   @default("America/Guayaquil")
-  taxId             String?
-  address           String?
-  phone             String?
-  email             String?
-  isActive          Boolean  @default(true)
+  id                 String   @id @default(cuid())
+  name               String
+  country            String   @default("EC")
+  currency           String   @default("USD")
+  timezone           String   @default("America/Guayaquil")
+  taxId              String?
+  address            String?
+  phone              String?
+  email              String?
+  isActive           Boolean  @default(true)
   // Facturación
-  invoicePrefix     String   @default("F")
-  nextInvoiceNumber Int      @default(1)
-  nextCustomerCode  Int      @default(1)
-  dueDays           Int      @default(10)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  invoicePrefix      String   @default("F")
+  nextInvoiceNumber  Int      @default(1)
+  nextCustomerCode   Int      @default(1)
+  nextProformaNumber Int      @default(1)
+  dueDays            Int      @default(10)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   users     User[]
   customers Customer[]
@@ -144,6 +146,11 @@ model Tenant {
   zones              Zone[]
   networkActions     NetworkAction[]
   jobRuns            JobRun[]
+  paymentAccounts    PaymentAccount[]
+  paymentPromises    PaymentPromise[]
+  proformas          Proforma[]
+  expenses           Expense[]
+  expenseCategories  ExpenseCategory[]
   monitorAlerts      MonitorAlert[]
 
   @@map("tenants")
@@ -161,11 +168,14 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  tenant          Tenant          @relation(fields: [tenantId], references: [id])
-  assignedTickets Ticket[]
-  ticketComments  TicketComment[]
-  payments        Payment[]
-  auditLogs       AuditLog[]
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  assignedTickets  Ticket[]
+  ticketComments   TicketComment[]
+  payments         Payment[]
+  auditLogs        AuditLog[]
+  paymentPromises  PaymentPromise[]
+  expenses         Expense[]
+  reviewedPayments Payment[]        @relation("PaymentReviewer")
 
   @@index([tenantId])
   @@map("users")
@@ -197,14 +207,16 @@ model Customer {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  services       Service[]
-  invoices       Invoice[]
-  payments       Payment[]
-  tickets        Ticket[]
-  zone           Zone?           @relation(fields: [zoneId], references: [id])
-  onus           ONU[]
-  networkActions NetworkAction[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  services        Service[]
+  invoices        Invoice[]
+  payments        Payment[]
+  tickets         Ticket[]
+  zone            Zone?            @relation(fields: [zoneId], references: [id])
+  onus            ONU[]
+  networkActions  NetworkAction[]
+  paymentPromises PaymentPromise[]
+  proformas       Proforma[]
 
   @@unique([tenantId, cedula])
   @@unique([tenantId, code])
@@ -284,11 +296,13 @@ model Invoice {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  customer Customer  @relation(fields: [customerId], references: [id])
-  service  Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  zone     Zone?     @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-  payments Payment[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  customer        Customer         @relation(fields: [customerId], references: [id])
+  service         Service?         @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  zone            Zone?            @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  payments        Payment[]
+  paymentPromises PaymentPromise[]
+  proforma        Proforma?
 
   @@unique([tenantId, number])
   // Evita facturar dos veces el mismo servicio en el mismo periodo.
@@ -299,24 +313,37 @@ model Invoice {
 }
 
 model Payment {
-  id          String        @id @default(cuid())
-  amount      Decimal       @db.Decimal(10, 2)
-  method      PaymentMethod @default(CASH)
-  reference   String?
-  status      PaymentStatus @default(APPROVED)
-  paidDate    DateTime      @default(now())
-  notes       String?
-  invoiceId   String?
-  customerId  String
-  createdById String?
-  tenantId    String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  amount       Decimal       @db.Decimal(10, 2)
+  method       PaymentMethod @default(CASH)
+  reference    String?
+  status       PaymentStatus @default(APPROVED)
+  paidDate     DateTime      @default(now())
+  notes        String?
+  /// Forma de pago configurada (cuenta bancaria, caja...).
+  accountId    String?
+  /// "STAFF" (registrado en oficina) o "REPORT" (informado por el cliente, pendiente de revisión).
+  source       String        @default("STAFF")
+  /// Comprobante (imagen o PDF) guardado en la base de datos.
+  receiptData  Bytes?
+  receiptMime  String?
+  receiptName  String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  rejectReason String?
+  invoiceId    String?
+  customerId   String
+  createdById  String?
+  tenantId     String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  customer  Customer @relation(fields: [customerId], references: [id])
-  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  createdBy User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  tenant     Tenant          @relation(fields: [tenantId], references: [id])
+  customer   Customer        @relation(fields: [customerId], references: [id])
+  invoice    Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  createdBy  User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  account    PaymentAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  reviewedBy User?           @relation("PaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status])
   @@index([invoiceId])
@@ -685,4 +712,146 @@ model JobLock {
   lockedUntil DateTime
 
   @@map("job_locks")
+}
+
+/// Forma de pago: caja, cuenta bancaria, pasarela... (se elige al registrar pagos y gastos).
+model PaymentAccount {
+  id        String        @id @default(cuid())
+  tenantId  String
+  name      String
+  method    PaymentMethod
+  /// Banco, número de cuenta, titular u otras indicaciones para el cliente.
+  details   String?
+  isActive  Boolean       @default(true)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  payments Payment[]
+  expenses Expense[]
+
+  @@unique([tenantId, name])
+  @@map("payment_accounts")
+}
+
+enum PromiseStatus {
+  ACTIVE
+  FULFILLED
+  BROKEN
+  CANCELLED
+}
+
+/// Promesa de pago: mientras esté vigente, el cliente no se corta por falta de pago.
+model PaymentPromise {
+  id           String        @id @default(cuid())
+  tenantId     String
+  customerId   String
+  invoiceId    String?
+  amount       Decimal?      @db.Decimal(10, 2)
+  /// Fecha límite prometida (fecha de calendario).
+  promisedDate DateTime
+  notes        String?
+  status       PromiseStatus @default(ACTIVE)
+  createdById  String?
+  createdAt    DateTime      @default(now())
+  resolvedAt   DateTime?
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  createdBy User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([customerId, status])
+  @@map("payment_promises")
+}
+
+enum ProformaStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  INVOICED
+}
+
+/// Proforma o cotización: documento sin valor fiscal que se puede convertir en factura.
+model Proforma {
+  id         String         @id @default(cuid())
+  tenantId   String
+  number     String
+  customerId String?
+  /// Para prospectos que aún no son clientes.
+  clientName String?
+  clientInfo String?
+  issueDate  DateTime
+  validUntil DateTime
+  status     ProformaStatus @default(DRAFT)
+  notes      String?
+  total      Decimal        @db.Decimal(10, 2)
+  invoiceId  String?        @unique
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id])
+  customer Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  invoice  Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  items    ProformaItem[]
+
+  @@unique([tenantId, number])
+  @@map("proformas")
+}
+
+model ProformaItem {
+  id          String  @id @default(cuid())
+  proformaId  String
+  description String
+  quantity    Decimal @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(10, 2)
+  sortOrder   Int     @default(0)
+
+  proforma Proforma @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+
+  @@map("proforma_items")
+}
+
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  expenses Expense[]
+
+  @@unique([tenantId, name])
+  @@map("expense_categories")
+}
+
+/// Gasto de la empresa (egreso).
+model Expense {
+  id          String   @id @default(cuid())
+  tenantId    String
+  date        DateTime
+  categoryId  String
+  description String
+  supplier    String?
+  reference   String?
+  amount      Decimal  @db.Decimal(10, 2)
+  accountId   String?
+  receiptData Bytes?
+  receiptMime String?
+  receiptName String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id])
+  category  ExpenseCategory @relation(fields: [categoryId], references: [id])
+  account   PaymentAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  createdBy User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, date])
+  @@map("expenses")
 }

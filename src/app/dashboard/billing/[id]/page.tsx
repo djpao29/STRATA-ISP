@@ -11,6 +11,7 @@ import { requireUser } from '@/lib/session'
 import { formatCurrency, formatDate, formatDateTime, toDateInput, toNumber } from '@/lib/format'
 import { PAYMENT_METHOD } from '@/lib/labels'
 import { todayIn } from '@/lib/dates'
+import { accountOptions } from '@/lib/payments'
 import { reviewPayment } from '../../payments/actions'
 import { cancelInvoice, registerPayment } from '../actions'
 import { PaymentForm } from '../forms'
@@ -29,6 +30,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
   if (!invoice) notFound()
 
   const currency = invoice.tenant.currency
+  const accounts = await accountOptions(user.tenantId)
   const paid = invoice.payments.filter((p) => p.status === 'APPROVED').reduce((sum, p) => sum + toNumber(p.amount), 0)
   const remaining = Math.max(0, Math.round((toNumber(invoice.amount) - paid) * 100) / 100)
   const open = invoice.status === 'PENDING' || invoice.status === 'OVERDUE'
@@ -119,6 +121,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
               action={registerPayment.bind(null, invoice.id)}
               remaining={remaining.toFixed(2)}
               today={toDateInput(todayIn(invoice.tenant.timezone))}
+              accounts={accounts}
             />
           </CardContent>
         </Card>

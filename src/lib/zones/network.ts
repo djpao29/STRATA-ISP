@@ -1,7 +1,7 @@
 import type { NetworkAction, NetworkActionType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { audit } from '@/lib/audit'
-import { localNow as localNowIn } from '@/lib/dates'
+import { localNow as localNowIn, todayIn } from '@/lib/dates'
 import { RouterOSError } from '@/lib/mikrotik/client'
 import { connectionFor } from '@/lib/mikrotik/connection'
 import { reconnectIp, reconnectPppoe, suspendIp, suspendPppoe } from '@/lib/mikrotik/actions'
@@ -129,6 +129,8 @@ export async function runSuspensions(tenantId: string, now = new Date()) {
         status: 'ACTIVE',
         suspendExempt: false,
         invoices: { some: { status: { in: ['PENDING', 'OVERDUE'] }, suspendDate: { lte: local } } },
+        // Promesa de pago vigente: no se corta hasta la fecha prometida.
+        paymentPromises: { none: { status: 'ACTIVE', promisedDate: { gte: todayIn(tenant.timezone, now) } } },
       },
       select: { id: true },
     })
@@ -155,7 +157,14 @@ export async function reconcileCustomer(customerId: string, now = new Date()) {
   if (customer.zone && !customer.zone.autoReconnect) return false
   const local = localNowIn(customer.tenant.timezone, now)
   const zone = customer.zone ?? { suspendHour: 0, suspendAfterInvoices: 1 }
-  if (shouldSuspend(await debtInvoices(customerId), zone.suspendHour, zone.suspendAfterInvoices, local)) return false
+  if (shouldSuspend(await debtInvoices(customerId), zone.suspendHour, zone.suspendAfterInvoices, local)) {
+    const promise = await prisma.paymentPromise.findFirst({
+      where: { customerId, status: 'ACTIVE', promisedDate: { gte: todayIn(customer.tenant.timezone, now) } },
+    })
+    if (!promise) return false
+    await reconnectCustomer(customerId, 'AUTO', `Promesa de pago hasta el ${promise.promisedDate.toISOString().slice(0, 10)}`)
+    return true
+  }
   await reconnectCustomer(customerId, 'AUTO', 'Pago registrado: deuda saldada')
   return true
 }

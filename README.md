@@ -90,6 +90,29 @@ router se hace desde el servidor; el navegador nunca recibe credenciales.
   normalizarse.
 - Con varias instancias de la app, deja el recolector activo solo en una: `MONITORING_ENABLED=false` en las demás.
 
+## Finanzas
+
+Grupo del menú con estas secciones:
+
+| Sección | Qué hace |
+| --- | --- |
+| Pagos Pendientes | Clientes con saldo, antigüedad de la deuda (1-30, 31-60, 61-90, +90 días), fecha de corte, promesa vigente y botón "Cobrar" |
+| Facturas | Facturación por zonas y facturas puntuales |
+| Transacciones | Todos los pagos, con forma de pago y comprobante |
+| Estadísticas | Reportes y exportación CSV |
+| Proformas | Cotizaciones con varias líneas (cliente o prospecto), imprimibles, que se convierten en factura |
+| Reporte de pagos | Pagos informados por el cliente con comprobante, pendientes de aprobar o rechazar (con motivo) |
+| Comprobantes de pago | Galería de fotos/PDF adjuntos a los pagos |
+| Promesas de Pago | El cliente promete pagar en una fecha (máx. 30 días): no se le corta hasta entonces y, si estaba cortado, se reconecta. Vencida sin pago → incumplida y se aplica el corte |
+| Formas de Pago | Cajas y cuentas bancarias donde se cobra (se eligen al registrar pagos y gastos) |
+| Cortes Automáticos | Registro de cortes y reconexiones en los routers |
+| Gastos | Egresos con categoría, proveedor y comprobante |
+| Contabilidad | Resumen (ingresos − gastos = utilidad, 12 meses, por forma de pago y por categoría), Libro de movimientos con saldo y exportación CSV, Categorías de gastos |
+| Dashboard de cobros | Cobrado hoy / 7 días / mes, % de recuperación, cobros por día, por forma de pago, por usuario y por zona |
+
+Los comprobantes (JPG, PNG, WEBP o PDF, máx. 5 MB) se guardan en la base de datos —entran en las copias
+de seguridad— y se valida su contenido real. Solo se cargan al abrirlos; las listas nunca los traen.
+
 ## Zonas: facturación y cortes automáticos
 
 Cada cliente pertenece a una zona (obligatorio al crearlo; se cambia desde su ficha). Una zona define:

@@ -51,6 +51,15 @@ async function main() {
     await prisma.zone.create({ data: { ...z, tenantId: tenant.id } })
   }
 
+  await prisma.paymentAccount.create({
+    data: { name: 'Caja (efectivo)', method: 'CASH', details: 'Pagos en efectivo en oficina', tenantId: tenant.id },
+  })
+  await prisma.expenseCategory.createMany({
+    data: ['Internet mayorista', 'Equipos y materiales', 'Salarios', 'Combustible y transporte', 'Alquiler', 'Electricidad', 'Otros'].map(
+      (name) => ({ name, tenantId: tenant.id })
+    ),
+  })
+
   await prisma.user.create({
     data: {
       email,

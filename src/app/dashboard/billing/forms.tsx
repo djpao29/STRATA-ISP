@@ -3,7 +3,6 @@
 import { ActionForm, SubmitButton } from '@/components/forms/action-form'
 import { FormGrid, SelectField, TextField } from '@/components/forms/fields'
 import type { ActionState } from '@/lib/actions'
-import { paymentMethodOptions } from '@/lib/labels'
 
 type Action = (state: ActionState, formData: FormData) => Promise<ActionState>
 
@@ -50,21 +49,44 @@ export function PaymentForm({
   action,
   remaining,
   today,
+  accounts,
+  submitLabel = 'Registrar pago',
 }: {
   action: Action
   remaining: string
   today: string
+  accounts: Array<{ value: string; label: string }>
+  submitLabel?: string
 }) {
   return (
     <ActionForm action={action} resetOnSuccess>
       <FormGrid>
         <TextField name="amount" label="Monto" required type="number" min={0.01} step="0.01" defaultValue={remaining} />
-        <SelectField name="method" label="Método" options={paymentMethodOptions} defaultValue="CASH" />
+        <SelectField name="accountId" label="Forma de pago" required options={accounts} defaultValue={accounts[0]?.value} />
         <TextField name="paidDate" label="Fecha de pago" required type="date" defaultValue={today} />
-        <TextField name="reference" label="Referencia / comprobante" maxLength={100} />
+        <TextField name="reference" label="Referencia / N.º de transacción" maxLength={100} />
       </FormGrid>
+      <ReceiptField />
       <TextField name="notes" label="Notas" maxLength={500} />
-      <SubmitButton>Registrar pago</SubmitButton>
+      <SubmitButton>{submitLabel}</SubmitButton>
     </ActionForm>
+  )
+}
+
+/** Campo para adjuntar la foto o el PDF del comprobante. */
+export function ReceiptField({ required = false }: { required?: boolean }) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor="receipt" className="text-sm font-medium">
+        Comprobante (foto o PDF, máx. 5 MB){required && <span className="ml-0.5 text-red-500">*</span>}
+      </label>
+      <input
+        id="receipt"
+        name="receipt"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:py-1.5 file:text-sm hover:file:bg-accent"
+      />
+    </div>
   )
 }

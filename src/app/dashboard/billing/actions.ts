@@ -7,9 +7,9 @@ import { prisma } from '@/lib/prisma'
 import { requireActionUser } from '@/lib/session'
 import { audit } from '@/lib/audit'
 import { formToObject, money, toActionError, type ActionState } from '@/lib/actions'
-import { nextInvoiceNumber, paidAmount, refreshInvoiceStatus } from '@/lib/billing'
+import { nextInvoiceNumber, paidAmount } from '@/lib/billing'
+import { createInvoicePayment, paymentInputSchema } from '@/lib/payments'
 import { runZoneBilling } from '@/lib/zones/billing'
-import { processSoon, reconcileCustomer } from '@/lib/zones/network'
 
 const dateInput = z
   .string({ required_error: 'Obligatorio' })
@@ -81,45 +81,11 @@ export async function cancelInvoice(_: ActionState, formData: FormData): Promise
   }
 }
 
-const paymentSchema = z.object({
-  amount: money,
-  method: z.enum(['CASH', 'TRANSFER', 'DEPOSIT', 'CARD', 'OTHER']),
-  reference: z.string().max(100).optional(),
-  paidDate: dateInput,
-  notes: z.string().max(500).optional(),
-})
-
 export async function registerPayment(invoiceId: string, _: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const user = await requireActionUser('payments')
-    const data = paymentSchema.parse(formToObject(formData))
-    const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, tenantId: user.tenantId } })
-    if (!invoice) throw new Error('La factura no existe.')
-    if (invoice.status === 'CANCELLED') throw new Error('No se pueden registrar pagos en una factura anulada.')
-
-    const remaining = invoice.amount.toNumber() - (await paidAmount(invoiceId))
-    if (data.amount - remaining > 0.004) {
-      throw new Error(`El monto supera el saldo pendiente de la factura (${remaining.toFixed(2)}).`)
-    }
-
-    const payment = await prisma.$transaction(async (tx) => {
-      const p = await tx.payment.create({
-        data: {
-          ...data,
-          status: 'APPROVED',
-          invoiceId,
-          customerId: invoice.customerId,
-          createdById: user.id,
-          tenantId: user.tenantId,
-        },
-      })
-      await refreshInvoiceStatus(tx, invoiceId)
-      return p
-    })
-    await audit({ tenantId: user.tenantId, userId: user.id, action: 'payment.create', entity: 'Payment', entityId: payment.id, details: { invoiceId, amount: data.amount } })
-    // Reconexión automática si el pago salda la deuda que causó el corte.
-    const reconnected = await reconcileCustomer(invoice.customerId)
-    if (reconnected) processSoon(invoice.customerId)
+    const input = paymentInputSchema.parse(formToObject(formData))
+    const { reconnected } = await createInvoicePayment({ user, invoiceId, input, receiptEntry: formData.get('receipt'), source: 'STAFF' })
     revalidatePath(`/dashboard/billing/${invoiceId}`)
     revalidatePath('/dashboard/billing')
     revalidatePath('/dashboard/payments')

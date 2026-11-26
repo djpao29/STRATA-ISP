@@ -3,6 +3,8 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { can } from '@/lib/permissions'
 import { CUSTOMER_STATUS, INVOICE_STATUS, PAYMENT_METHOD } from '@/lib/labels'
+import { ledger } from '@/lib/accounting'
+import { monthRange } from '@/lib/finance-period'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,13 +23,18 @@ function csv(headers: string[], rows: unknown[][]) {
 export async function GET(request: Request) {
   const session = await auth()
   const user = session?.user?.id
-    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { tenantId: true, role: true, isActive: true } })
+    ? await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { tenantId: true, role: true, isActive: true, tenant: { select: { timezone: true } } },
+      })
     : null
-  if (!user?.isActive || !can(user.role, 'reports')) {
+  const url = new URL(request.url)
+  const type = url.searchParams.get('type')
+  // El libro de movimientos es contabilidad; el resto, reportes.
+  if (!user?.isActive || !can(user.role, type === 'ledger' ? 'accounting' : 'reports')) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const type = new URL(request.url).searchParams.get('type')
   const tenantId = user.tenantId
   let content: string
 
@@ -64,6 +71,16 @@ export async function GET(request: Request) {
       rows.map((r) => [
         r.cedula, r.firstName, r.lastName, r.phone, r.email, r.city, r.neighborhood, r.address,
         CUSTOMER_STATUS[r.status], r.createdAt,
+      ])
+    )
+  } else if (type === 'ledger') {
+    const period = monthRange(url.searchParams.get('month') ?? undefined, user.tenant.timezone)
+    const rows = await ledger(tenantId, period.start, period.end)
+    content = csv(
+      ['Fecha', 'Tipo', 'Concepto', 'Detalle', 'Cuenta', 'Ingreso', 'Egreso', 'Saldo'],
+      rows.map((r) => [
+        r.date, r.kind === 'INGRESO' ? 'Ingreso' : 'Egreso', r.concept, r.detail, r.account,
+        r.amount > 0 ? r.amount.toFixed(2) : '', r.amount < 0 ? (-r.amount).toFixed(2) : '', r.balance.toFixed(2),
       ])
     )
   } else {

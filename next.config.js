@@ -15,7 +15,11 @@ const nextConfig = {
   // Genera un servidor autocontenido en .next/standalone para la imagen Docker.
   output: 'standalone',
   // Habilita src/instrumentation.ts (validación del entorno al arrancar).
-  experimental: { instrumentationHook: true },
+  experimental: {
+    instrumentationHook: true,
+    // Permite subir comprobantes de hasta 5 MB en los formularios.
+    serverActions: { bodySizeLimit: '6mb' },
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },

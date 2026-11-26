@@ -117,7 +117,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           <BigValue value={d.plans} caption="Disponibles" />
         </KpiCard>
 
-        <KpiCard title="Reporte de pagos" icon={ClipboardList} color="amber" href={can(user.role, 'payments') ? '/dashboard/payments?status=PENDING' : undefined}>
+        <KpiCard title="Reporte de pagos" icon={ClipboardList} color="amber" href={can(user.role, 'payments') ? '/dashboard/finance/payment-reports' : undefined}>
           <BigValue value={d.pendingPayments} caption={d.pendingPayments ? 'Pagos por revisar' : 'Sin reportes por revisar'} />
         </KpiCard>
 

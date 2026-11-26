@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { markOverdueInvoices } from '@/lib/billing'
 import { runZoneBilling } from '@/lib/zones/billing'
 import { processNetworkActions, runReconnections, runSuspensions } from '@/lib/zones/network'
+import { runPromises } from '@/lib/promises'
 
 /**
  * Tareas programadas del backend (no dependen de que alguien abra el panel):
@@ -43,6 +44,7 @@ export async function runTenantJobs(tenantId: string, now = new Date()) {
   try {
     summary.billing = await runZoneBilling(tenantId, { now })
     await markOverdueInvoices(tenantId)
+    summary.promises = await runPromises(tenantId, now)
     summary.suspensions = await runSuspensions(tenantId, now)
     summary.reconnections = await runReconnections(tenantId, now)
   } catch (error) {

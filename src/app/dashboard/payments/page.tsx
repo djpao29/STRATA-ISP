@@ -11,7 +11,7 @@ import { formatCurrency, formatDate } from '@/lib/format'
 import { PAYMENT_METHOD } from '@/lib/labels'
 import { reviewPayment } from './actions'
 
-export const metadata = { title: 'Pagos' }
+export const metadata = { title: 'Transacciones' }
 
 const statusOptions = [
   { value: 'PENDING', label: 'Pendiente de revisión' },
@@ -54,6 +54,7 @@ export default async function PaymentsPage({ searchParams }: Props) {
         customer: { select: { id: true, firstName: true, lastName: true } },
         invoice: { select: { id: true, number: true } },
         createdBy: { select: { name: true } },
+        account: { select: { name: true } },
       },
     }),
     prisma.payment.count({ where }),
@@ -62,14 +63,14 @@ export default async function PaymentsPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Pagos"
-        description="Los pagos se registran desde la factura correspondiente. Aquí se consultan y revisan."
+        title="Transacciones"
+        description="Todos los pagos registrados. Se registran desde la factura o desde Reporte de pagos."
       />
 
       <SearchBar q={q} status={status} placeholder="Buscar por cliente, cédula, factura o referencia" statusOptions={statusOptions} />
 
       <DataTable
-        headers={['Fecha', 'Cliente', 'Factura', 'Monto', 'Método', 'Referencia', 'Registrado por', 'Estado', '']}
+        headers={['Fecha', 'Cliente', 'Factura', 'Monto', 'Forma de pago', 'Referencia', 'Registrado por', 'Estado', '']}
         rowCount={payments.length}
         emptyText={q || status ? 'Ningún pago coincide con el filtro.' : 'Todavía no hay pagos registrados.'}
       >
@@ -91,8 +92,15 @@ export default async function PaymentsPage({ searchParams }: Props) {
               )}
             </td>
             <td className="font-medium">{formatCurrency(p.amount, currency)}</td>
-            <td>{PAYMENT_METHOD[p.method]}</td>
-            <td>{p.reference ?? '—'}</td>
+            <td>{p.account?.name ?? PAYMENT_METHOD[p.method]}</td>
+            <td>
+              {p.reference ?? '—'}
+              {p.receiptMime && (
+                <a href={`/api/files/payment/${p.id}`} target="_blank" rel="noreferrer" className="ml-1 text-xs text-blue-700 hover:underline">
+                  comprobante
+                </a>
+              )}
+            </td>
             <td>{p.createdBy?.name ?? '—'}</td>
             <td>
               <StatusBadge value={p.status} />
