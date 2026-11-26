@@ -16,7 +16,7 @@ permisos por rol.
 | Facturación | Facturas mensuales generadas por las zonas, facturas puntuales, numeración correlativa, vencimientos, anulación, impresión |
 | Pagos | Registro de pagos por factura (parciales o totales), aprobación y rechazo, la factura se marca pagada sola |
 | Red | Inventario de IP, MAC y PPPoE por servicio, detección de IPs duplicadas |
-| Routers | Alta de equipos (contraseña cifrada) y prueba de conexión real a la API REST de RouterOS |
+| Routers | Alta de equipos (contraseña cifrada), prueba de conexión real a la API REST de RouterOS y VPN WireGuard: el sistema crea las claves, asigna a cada MikroTik una IP del túnel, genera el script de RouterOS 7 (repetible) y el wg0.conf del servidor, para administrar routers sin IP pública |
 | Monitoreo MikroTik | Estado en tiempo real vía API REST de RouterOS 7: CPU (y por núcleo), RAM, almacenamiento, temperatura, voltaje, uptime, tráfico por interfaz (WAN, LAN, SFP/SFP+) en vivo e histórico, sesiones PPPoE, clientes conectados y desconectados, consumo por cliente (colas simples) y alertas configurables |
 | OLT | Ver sección «OLT (GPON)» |
 | Soporte | Tickets con prioridad, asignación, estados y comentarios |

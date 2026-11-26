@@ -210,6 +210,7 @@ model Tenant {
   napBoxes              NapBox[]
   ponEvents             PonEvent[]
   oltSettings           OltSettings?
+  wireguard             WireguardServer?
 
   @@map("tenants")
 }
@@ -488,6 +489,11 @@ model Router {
   lastSeenAt        DateTime?
   lastError         String?
   latencyMs         Int?
+  /// Túnel WireGuard hacia el servidor del sistema: IP del router en el túnel y sus claves.
+  wgAddress         String?
+  /// Cifrada con ENCRYPTION_KEY (va en el script de RouterOS).
+  wgPrivateKeyEnc   String?
+  wgPublicKey       String?
   failCount         Int          @default(0)
   tenantId          String
   createdAt         DateTime     @default(now())
@@ -1318,4 +1324,24 @@ model OltSettings {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("olt_settings")
+}
+
+/// Servidor WireGuard del sistema: los routers se conectan a él para llegar sin IP pública.
+model WireguardServer {
+  tenantId      String   @id
+  /// IP pública o dominio donde escucha el servidor WireGuard.
+  endpoint      String
+  port          Int      @default(51820)
+  /// Red del túnel (ej. 10.200.0.0/24); el servidor usa la primera IP.
+  network       String   @default("10.200.0.0/24")
+  serverAddress String   @default("10.200.0.1")
+  /// Cifrada con ENCRYPTION_KEY.
+  privateKeyEnc String
+  publicKey     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("wireguard_servers")
 }
