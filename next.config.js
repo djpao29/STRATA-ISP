@@ -4,7 +4,7 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self), payment=()' },
   // Solo tiene efecto cuando la app se sirve por HTTPS.
   { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
 ]
@@ -19,6 +19,8 @@ const nextConfig = {
     instrumentationHook: true,
     // Permite subir comprobantes de hasta 5 MB en los formularios.
     serverActions: { bodySizeLimit: '6mb' },
+    // Librerías de red para OLT (SNMP y SSH) que no deben empaquetarse.
+    serverComponentsExternalPackages: ['net-snmp', 'ssh2'],
   },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]

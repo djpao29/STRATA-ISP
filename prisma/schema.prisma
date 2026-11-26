@@ -105,9 +105,48 @@ enum OLTStatus {
 }
 
 enum ONUStatus {
+  /// En línea.
   ACTIVE
+  /// Desactivada a propósito.
   INACTIVE
+  /// Fuera de línea por pérdida de señal óptica (fibra).
   LOS
+  /// Sin energía (dying gasp: el cliente apagó o se fue la luz).
+  POWER_OFF
+  /// Fuera de línea por otra causa.
+  OFFLINE
+  /// Aún no leída de la OLT.
+  UNKNOWN
+}
+
+enum OltBrand {
+  HUAWEI
+  ZTE
+  VSOL
+}
+
+enum CliProtocol {
+  TELNET
+  SSH
+}
+
+enum OnuAuthState {
+  /// Autorizada en la OLT.
+  AUTHORIZED
+  /// Registrada en el sistema; se autoriza sola cuando la OLT la detecte.
+  PREAUTHORIZED
+  /// En cola para autorizar (o reintentando).
+  PENDING
+  /// La OLT rechazó la autorización.
+  FAILED
+}
+
+enum PonEventKind {
+  SIGNAL_VARIATION
+  POWER_OFF
+  LOS
+  PON_DOWN
+  OFFLINE
 }
 
 model Tenant {
@@ -156,6 +195,11 @@ model Tenant {
   notificationCampaigns NotificationCampaign[]
   screenNotices         ScreenNotice[]
   monitorAlerts         MonitorAlert[]
+  onuModels             OnuModel[]
+  oltSpeedPlans         OltSpeedPlan[]
+  napBoxes              NapBox[]
+  ponEvents             PonEvent[]
+  oltSettings           OltSettings?
 
   @@map("tenants")
 }
@@ -593,40 +637,86 @@ model TicketComment {
 }
 
 model OLT {
-  id           String    @id @default(cuid())
-  name         String
-  host         String
-  port         Int       @default(161)
-  vendor       String?
+  id                String      @id @default(cuid())
+  name              String
+  host              String
+  port              Int         @default(161)
+  vendor            String?
   /// Comunidad SNMP cifrada con ENCRYPTION_KEY.
-  communityEnc String
-  status       OLTStatus @default(UNKNOWN)
-  tenantId     String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  communityEnc      String
+  status            OLTStatus   @default(UNKNOWN)
+  brand             OltBrand    @default(HUAWEI)
+  /// Acceso de consola para autorizar ONUs (Telnet o SSH).
+  cliProtocol       CliProtocol @default(TELNET)
+  cliPort           Int         @default(23)
+  cliUsername       String?
+  /// Cifrada con ENCRYPTION_KEY.
+  cliPasswordEnc    String?
+  /// Clave de "enable" si la OLT la pide (cifrada).
+  enablePasswordEnc String?
+  /// Número de frame/rack (Huawei 0, ZTE 1).
+  frame             Int         @default(0)
+  coordinates       String?
+  pollEnabled       Boolean     @default(true)
+  lastPollAt        DateTime?
+  lastError         String?
+  temperature       Float?
+  uptimeSec         Int?
+  /// Perfiles por defecto para autorizar (Huawei: line/srv profile ID; ZTE: tcont/onu profile; VSOL: profile).
+  lineProfile       String?
+  srvProfile        String?
+  defaultVlan       Int?
+  /// Plantilla de comandos propia para autorizar (vacía = la de la marca).
+  authTemplate      String?
+  tenantId          String
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  onus   ONU[]
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+  onus        ONU[]
+  discoveries OnuDiscovery[]
+  napBoxes    NapBox[]
+  ponEvents   PonEvent[]
 
   @@unique([tenantId, name])
   @@map("olts")
 }
 
 model ONU {
-  id         String    @id @default(cuid())
-  serial     String
-  name       String?
-  slot       Int
-  port       Int
-  onuIndex   Int?
-  status     ONUStatus @default(ACTIVE)
-  customerId String?
-  oltId      String
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id              String       @id @default(cuid())
+  serial          String
+  name            String?
+  slot            Int
+  port            Int
+  onuIndex        Int?
+  status          ONUStatus    @default(ACTIVE)
+  authState       OnuAuthState @default(AUTHORIZED)
+  authorizedAt    DateTime?
+  authError       String?
+  /// ¿Apareció en la última lectura de la OLT?
+  inOlt           Boolean      @default(false)
+  lastSeenAt      DateTime?
+  statusChangedAt DateTime?
+  /// Potencia óptica recibida por la ONU (dBm) y la lectura anterior.
+  rxPower         Float?
+  prevRxPower     Float?
+  txPower         Float?
+  vlan            Int?
+  onuModelId      String?
+  speedPlanId     String?
+  napBoxId        String?
+  napPort         Int?
+  customerId      String?
+  oltId           String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
-  olt      OLT       @relation(fields: [oltId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  olt       OLT           @relation(fields: [oltId], references: [id], onDelete: Cascade)
+  customer  Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  onuModel  OnuModel?     @relation(fields: [onuModelId], references: [id], onDelete: SetNull)
+  speedPlan OltSpeedPlan? @relation(fields: [speedPlanId], references: [id], onDelete: SetNull)
+  napBox    NapBox?       @relation(fields: [napBoxId], references: [id], onDelete: SetNull)
+  events    PonEvent[]
 
   @@unique([oltId, serial])
   @@map("onus")
@@ -1075,4 +1165,127 @@ model NoticeDismissal {
 
   @@id([noticeId, userId])
   @@map("notice_dismissals")
+}
+
+/// Modelo de ONU (catálogo).
+model OnuModel {
+  id        String    @id @default(cuid())
+  tenantId  String
+  name      String
+  brand     OltBrand?
+  /// Tipo con que la OLT la conoce (ZTE "type", Huawei equipment ID). Se usa al autorizar.
+  oltType   String?
+  ethPorts  Int       @default(1)
+  potsPorts Int       @default(0)
+  wifi      Boolean   @default(false)
+  catv      Boolean   @default(false)
+  notes     String?
+  createdAt DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  onus   ONU[]
+
+  @@unique([tenantId, name])
+  @@map("onu_models")
+}
+
+/// Plan de velocidad de la OLT (perfiles de tráfico usados al autorizar).
+model OltSpeedPlan {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  download    Int
+  upload      Int
+  lineProfile String?
+  srvProfile  String?
+  vlan        Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  onus   ONU[]
+
+  @@unique([tenantId, name])
+  @@map("olt_speed_plans")
+}
+
+/// Caja NAP (punto de distribución con splitter).
+model NapBox {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  coordinates String?
+  address     String?
+  capacity    Int      @default(8)
+  splitter    String?
+  oltId       String?
+  ponSlot     Int?
+  ponPort     Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  olt    OLT?   @relation(fields: [oltId], references: [id], onDelete: SetNull)
+  onus   ONU[]
+
+  @@unique([tenantId, name])
+  @@map("nap_boxes")
+}
+
+/// ONU detectada por la OLT sin autorizar (autofind).
+model OnuDiscovery {
+  id          String   @id @default(cuid())
+  oltId       String
+  serial      String
+  slot        Int
+  port        Int
+  equipment   String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  /// false cuando deja de aparecer o se autoriza.
+  active      Boolean  @default(true)
+
+  olt OLT @relation(fields: [oltId], references: [id], onDelete: Cascade)
+
+  @@unique([oltId, serial])
+  @@index([oltId, active])
+  @@map("onu_discoveries")
+}
+
+/// Evento de la red PON (se abre al detectarlo y se cierra al normalizarse).
+model PonEvent {
+  id         String       @id @default(cuid())
+  tenantId   String
+  oltId      String
+  onuId      String?
+  kind       PonEventKind
+  message    String
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  olt    OLT    @relation(fields: [oltId], references: [id], onDelete: Cascade)
+  onu    ONU?   @relation(fields: [onuId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, resolvedAt])
+  @@index([oltId, kind, resolvedAt])
+  @@map("pon_events")
+}
+
+/// Umbrales y frecuencia de lectura de las OLT.
+model OltSettings {
+  tenantId       String   @id
+  /// Señal baja y crítica (dBm).
+  lowSignal      Float    @default(-27)
+  criticalSignal Float    @default(-29)
+  /// Cambio de señal (dB) entre lecturas que genera un evento.
+  variationDb    Float    @default(3)
+  pollMinutes    Int      @default(5)
+  /// Autorizar sola una ONU pre-autorizada cuando la OLT la detecte.
+  autoAuthorize  Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("olt_settings")
 }

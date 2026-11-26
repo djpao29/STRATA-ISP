@@ -5,13 +5,15 @@ import { can } from '@/lib/permissions'
 import { CUSTOMER_STATUS, INVOICE_STATUS, PAYMENT_METHOD } from '@/lib/labels'
 import { ledger } from '@/lib/accounting'
 import { monthRange } from '@/lib/finance-period'
+import { ONU_STATUS_LABEL } from '@/lib/olt/labels'
 
 export const dynamic = 'force-dynamic'
 
 /** Escapa un valor para CSV y neutraliza fórmulas (=, +, -, @) al abrirlo en Excel. */
 function cell(value: unknown) {
   let s = value == null ? '' : value instanceof Date ? value.toISOString().slice(0, 10) : String(value)
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
+  // Los números (p. ej. señal -25.1 dBm) no son fórmulas: se dejan tal cual.
+  if (typeof value !== 'number' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const type = url.searchParams.get('type')
   // El libro de movimientos es contabilidad; los planes, su módulo; el resto, reportes.
-  const area = type === 'ledger' ? 'accounting' : type === 'plans' ? 'plans' : 'reports'
+  const area = type === 'ledger' ? 'accounting' : type === 'plans' ? 'plans' : type === 'onus' ? 'olt' : 'reports'
   if (!user?.isActive || !can(user.role, area)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
@@ -82,6 +84,26 @@ export async function GET(request: Request) {
       rows.map((r) => [
         r.date, r.kind === 'INGRESO' ? 'Ingreso' : 'Egreso', r.concept, r.detail, r.account,
         r.amount > 0 ? r.amount.toFixed(2) : '', r.amount < 0 ? (-r.amount).toFixed(2) : '', r.balance.toFixed(2),
+      ])
+    )
+  } else if (type === 'onus') {
+    const rows = await prisma.oNU.findMany({
+      where: { olt: { tenantId } },
+      orderBy: [{ oltId: 'asc' }, { slot: 'asc' }, { port: 'asc' }, { onuIndex: 'asc' }],
+      include: {
+        olt: { select: { name: true, frame: true } },
+        customer: { select: { firstName: true, lastName: true, code: true } },
+        onuModel: { select: { name: true } },
+        speedPlan: { select: { name: true } },
+        napBox: { select: { name: true } },
+      },
+    })
+    content = csv(
+      ['OLT', 'PON', 'ID', 'Serial', 'Cliente', 'Código', 'Estado', 'En la OLT', 'Señal RX (dBm)', 'Autorización', 'Modelo', 'Plan', 'Caja NAP', 'Puerto NAP', 'VLAN', 'Autorizada'],
+      rows.map((o) => [
+        o.olt.name, `${o.olt.frame}/${o.slot}/${o.port}`, o.onuIndex, o.serial,
+        o.customer ? `${o.customer.firstName} ${o.customer.lastName}` : o.name, o.customer?.code ? `C-${String(o.customer.code).padStart(6, '0')}` : '',
+        ONU_STATUS_LABEL[o.status], o.inOlt ? 'Sí' : 'No', o.rxPower, { AUTHORIZED: 'Autorizada', PREAUTHORIZED: 'Pre-autorizada', PENDING: 'En cola', FAILED: 'Falló' }[o.authState], o.onuModel?.name, o.speedPlan?.name, o.napBox?.name, o.napPort, o.vlan, o.authorizedAt,
       ])
     )
   } else if (type === 'plans') {

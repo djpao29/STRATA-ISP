@@ -6,6 +6,7 @@ import { runZoneBilling } from '@/lib/zones/billing'
 import { processNetworkActions, runReconnections, runSuspensions } from '@/lib/zones/network'
 import { runPromises } from '@/lib/promises'
 import { processCampaigns } from '@/lib/notifications'
+import { pollDueOlts } from '@/lib/olt/service'
 
 /**
  * Tareas programadas del backend (no dependen de que alguien abra el panel):
@@ -78,6 +79,8 @@ async function tick(state: State) {
       await processNetworkActions({ limit: 50 })
       // Mensajes de WhatsApp que quedaron en cola o deben reintentarse.
       await processCampaigns({ limit: 200 }).catch((e) => console.error('[tareas] notificaciones', e))
+      // Lectura de las OLT (solo lectura; cada una según la frecuencia configurada).
+      await pollDueOlts().catch((e) => console.error('[tareas] OLT', e))
     } finally {
       await releaseLock()
     }

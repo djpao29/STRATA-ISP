@@ -18,7 +18,7 @@ permisos por rol.
 | Red | Inventario de IP, MAC y PPPoE por servicio, detección de IPs duplicadas |
 | Routers | Alta de equipos (contraseña cifrada) y prueba de conexión real a la API REST de RouterOS |
 | Monitoreo MikroTik | Estado en tiempo real vía API REST de RouterOS 7: CPU (y por núcleo), RAM, almacenamiento, temperatura, voltaje, uptime, tráfico por interfaz (WAN, LAN, SFP/SFP+) en vivo e histórico, sesiones PPPoE, clientes conectados y desconectados, consumo por cliente (colas simples) y alertas configurables |
-| OLT/FTTH | OLTs (comunidad SNMP cifrada) y ONUs por slot/puerto asignadas a clientes |
+| OLT | Ver sección «OLT (GPON)» |
 | Soporte | Tickets con prioridad, asignación, estados y comentarios |
 | WhatsApp | Configuración de WhatsApp Cloud API (Meta) y envío de prueba con plantilla |
 | Reportes | Facturado vs. cobrado (12 meses), resumen por estados, mayores deudores, exportación CSV |
@@ -89,6 +89,27 @@ router se hace desde el servidor; el navegador nunca recibe credenciales.
   WAN o SFP caídos. Límites e intervalos en **Monitoreo → Ajustes y alertas**. Se resuelven solas al
   normalizarse.
 - Con varias instancias de la app, deja el recolector activo solo en una: `MONITORING_ENABLED=false` en las demás.
+
+## OLT (GPON)
+
+Huawei (MA5608T/MA5683T/MA5800), ZTE (C300/C320/C600) y VSOL. Cada OLT se lee cada pocos minutos (configurable en Alertas).
+Huawei y ZTE se leen por SNMP v2c (solo lectura); VSOL por consola. Las ONUs se autorizan por Telnet o SSH.
+
+| Sección | Qué hace |
+| --- | --- |
+| Dashboard | ONUs en sistema / en OLT / sin autorizar, autorizadas hoy / en el mes / total, activas, sin energía, fuera de línea y baja señal, eventos PON, actividad, gráfico anual y lista de OLTs. Se refresca solo |
+| OLT | Alta y configuración (SNMP, consola, perfiles y VLAN por defecto, plantilla de comandos editable) y vista por puerto PON |
+| ONU | Autorizadas (filtros, señal, cliente, modelo, plan, caja NAP), Sin autorizar (autofind, botón Autorizar), Pre-autorizar (se autoriza sola cuando la OLT la detecta) y Pendientes |
+| Modelo de ONU / Planes de velocidad | Catálogos usados al autorizar (tipo de ONU de ZTE, perfiles de línea/servicio, VLAN) |
+| Cajas NAP | Splitter, OLT/PON, ocupación de puertos |
+| Mapa FTTH | OLT → NAP → cliente con el estado de cada ONU |
+| Salud de red | Distribución de señal, peores ONUs, puertos PON y temperatura |
+| Alertas | Umbrales de señal, variación y frecuencia de lectura; eventos abiertos y cerrados |
+| Reports | ONUs por OLT, modelo y plan, historial y CSV |
+
+Eventos: variación de señal, sin energía (dying gasp), LOS, PON completa caída (todas las ONUs de un puerto) y fuera de línea.
+Se cierran solos cuando la ONU se normaliza. Las plantillas de autorización por marca están en `src/lib/olt/drivers.ts`;
+si el firmware de tu OLT usa otros comandos, ajústala en la configuración de la OLT.
 
 ## Clientes
 
