@@ -164,7 +164,17 @@ export async function runCli(t: CliTarget, commands: string[], opts: { stopOnErr
       }
     }
     await waitFor(new RegExp(`${PROMPT.source}|${LOGIN.source}|${PASSWORD.source}`, 'i'), 'inicio de sesión')
-    if (LOGIN.test(buffer) || PASSWORD.test(buffer)) throw new CliError('Usuario o clave de consola incorrectos.', all)
+    if (LOGIN.test(buffer) || PASSWORD.test(buffer)) {
+      // Lo que respondió la OLT (la clave no se repite en pantalla), para saber por qué rechazó el acceso.
+      const said = buffer
+        .replace(/[^\x20-\x7e\r\n]/g, '')
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .slice(-3)
+        .join(' | ')
+      throw new CliError(`Usuario o clave de consola incorrectos${said ? ` (la OLT respondió: «${said.slice(0, 160)}»)` : ''}.`, all)
+    }
 
     const outputs: string[] = []
     for (const raw of commands) {
