@@ -21,7 +21,7 @@ import { cycleInfo, lastCycleStart, nextCycleStart } from '@/lib/zones/cycle'
 import { formatCustomerCode } from '@/lib/zones/billing'
 import { formatDateTime } from '@/lib/format'
 
-export default async function CustomerDetailPage({ params }: { params: { id: string } }) {
+export default async function CustomerDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { alta?: string; altaError?: string } }) {
   const user = await requireUser('customers')
   const customer = await prisma.customer.findFirst({
     where: { id: params.id, tenantId: user.tenantId },
@@ -66,7 +66,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
 
   return (
     <div className="space-y-6">
-      <PageHeader title={`${customer.firstName} ${customer.lastName}`} description={`${formatCustomerCode(customer.code)} · Cédula/RUC ${customer.cedula}`}>
+      <PageHeader title={`${customer.firstName} ${customer.lastName}`} description={`${formatCustomerCode(customer.code)}${customer.cedula ? ` · Cédula/RUC ${customer.cedula}` : ''}`}>
         {canWrite && (
           <Button asChild variant="outline">
             <Link href={`/dashboard/customers/${customer.id}/edit`}>
@@ -85,6 +85,12 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
         )}
       </PageHeader>
 
+      {searchParams.alta && (
+        <p className={`rounded-md border px-4 py-3 text-sm ${searchParams.altaError ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-green-200 bg-green-50 text-green-900'}`}>
+          Cliente creado. {searchParams.alta.slice(0, 500)}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -95,9 +101,9 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
               <Info label="Estado">
                 <StatusBadge value={customer.status} />
               </Info>
-              <Info label="Teléfono">{customer.phone}</Info>
-              <Info label="Correo">{customer.email ?? '—'}</Info>
-              <Info label="Ciudad">{[customer.city, customer.neighborhood].filter(Boolean).join(' · ') || '—'}</Info>
+              <Info label="Teléfono">{[customer.phone, customer.phone2].filter(Boolean).join(' · ')}</Info>
+              <Info label="Correo">{[customer.email, customer.email2].filter(Boolean).join(' · ') || '—'}</Info>
+              <Info label="Ubicación">{[customer.neighborhood, customer.city, customer.province].filter(Boolean).join(' · ') || '—'}</Info>
               <Info label="Dirección">{customer.address ?? '—'}</Info>
               <Info label="Coordenadas">
                 {customer.coordinates ? (
@@ -233,11 +239,27 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
             <td>
               {s.plan.download}/{s.plan.upload} Mbps
             </td>
-            <td>{formatCurrency(s.plan.price, currency)}</td>
-            <td>{CLIENT_MODE[s.mode]}</td>
+            <td>
+              {formatCurrency(Math.max(0, Number(s.plan.price) - Number(s.discount)), currency)}
+              {Number(s.discount) > 0 && (
+                <div className="text-xs text-green-700">
+                  Desc. {formatCurrency(s.discount, currency)}
+                  {s.discountNote ? ` · ${s.discountNote}` : ''}
+                </div>
+              )}
+            </td>
+            <td>
+              {CLIENT_MODE[s.mode]}
+              {s.accessType && <div className="text-xs text-muted-foreground">{s.accessType === 'FIBER' ? 'Fibra' : `Antena${s.accessPoint ? ` · ${s.accessPoint}` : ''}`}</div>}
+            </td>
             <td>
               {s.ipAddress ?? '—'}
               {s.pppoeUser && <div className="text-xs text-muted-foreground">{s.pppoeUser}</div>}
+              {s.ipv6 && <div className="font-mono text-xs text-muted-foreground">{s.ipv6}</div>}
+              {(s.lanInterface || s.wanInterface) && (
+                <div className="text-xs text-muted-foreground">{[s.lanInterface && `LAN ${s.lanInterface}`, s.wanInterface && `WAN ${s.wanInterface}`].filter(Boolean).join(' · ')}</div>
+              )}
+              {!s.syncRouter && <div className="text-xs text-amber-700">Solo panel</div>}
             </td>
             <td>{s.router?.name ?? '—'}</td>
             <td>

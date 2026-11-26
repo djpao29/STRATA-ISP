@@ -7,18 +7,24 @@ import { prisma } from '@/lib/prisma'
 import { requireActionUser } from '@/lib/session'
 import { audit } from '@/lib/audit'
 import { formToObject, optionalText, toActionError, type ActionState } from '@/lib/actions'
-import { nextCustomerCode } from '@/lib/zones/billing'
+import { createCustomerWithService } from '@/lib/onboarding'
 import { processSoon, reconnectCustomer, suspendCustomer } from '@/lib/zones/network'
+
+const phoneRule = /^\+?[0-9 ()-]{7,20}$/
 
 const customerSchema = z.object({
   cedula: z
-    .string({ required_error: 'Obligatorio' })
-    .regex(/^[0-9A-Za-z-]{5,20}$/, 'Cédula, RUC o pasaporte (5 a 20 caracteres, sin espacios)'),
+    .string()
+    .regex(/^[0-9A-Za-z-]{5,20}$/, 'Cédula, RUC o pasaporte (5 a 20 caracteres, sin espacios)')
+    .optional(),
   firstName: z.string({ required_error: 'Obligatorio' }).max(100),
   lastName: z.string({ required_error: 'Obligatorio' }).max(100),
   email: z.string().email('Correo inválido').max(200).optional(),
-  phone: z.string({ required_error: 'Obligatorio' }).regex(/^\+?[0-9 ]{7,20}$/, 'Teléfono inválido'),
+  email2: z.string().email('Correo inválido').max(200).optional(),
+  phone: z.string({ required_error: 'Obligatorio' }).regex(phoneRule, 'Teléfono inválido'),
+  phone2: z.string().regex(phoneRule, 'Teléfono inválido').optional(),
   address: optionalText(300),
+  province: optionalText(100),
   city: optionalText(100),
   neighborhood: optionalText(100),
   coordinates: z
@@ -44,7 +50,7 @@ function nullable<T extends Record<string, unknown>>(data: T, keys: Array<keyof 
   return out as T
 }
 
-const OPTIONAL_KEYS = ['email', 'address', 'city', 'neighborhood', 'coordinates', 'notes'] as const
+const OPTIONAL_KEYS = ['cedula', 'email', 'email2', 'phone2', 'address', 'province', 'city', 'neighborhood', 'coordinates', 'notes'] as const
 
 async function findOwned(id: string, tenantId: string) {
   const customer = await prisma.customer.findFirst({ where: { id, tenantId } })
@@ -52,24 +58,106 @@ async function findOwned(id: string, tenantId: string) {
   return customer
 }
 
+const ipv6Rule = /^[0-9A-Fa-f:]{2,39}(\/\d{1,3})?$/
+const ifaceName = z.string().max(60).regex(/^[\w .:/@-]+$/, 'Nombre de interfaz inválido')
+
+/** Campos del alta: servicio, equipo, ONU y factura (todos opcionales salvo que haya plan). */
+const onboardingSchema = z.object({
+  planId: z.string().optional(),
+  routerId: z.string().optional(),
+  mode: z.enum(['PPPoE', 'DHCP', 'STATIC_IP']).optional(),
+  ipAddress: z.string().regex(/^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/, 'IPv4 inválida').optional(),
+  ipv6: z.string().regex(ipv6Rule, 'IPv6 inválida').optional(),
+  macAddress: z.string().regex(/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/, 'MAC inválida (aa:bb:cc:dd:ee:ff)').optional(),
+  lanInterface: ifaceName.optional(),
+  wanInterface: ifaceName.optional(),
+  pppoeUser: z.string().max(100).regex(/^[\w.@-]+$/, 'Sin espacios: letras, números, punto, guion o @').optional(),
+  pppoePassword: z.string().min(4, 'Mínimo 4 caracteres').max(64).optional(),
+  discount: z.coerce.number().min(0, 'No puede ser negativo').max(1_000_000).optional(),
+  discountNote: optionalText(120),
+  accessType: z.enum(['FIBER', 'ANTENNA']).optional(),
+  accessPoint: optionalText(100),
+  onuId: z.string().optional(),
+  newOnu: z.literal('on').optional(),
+  onuOltId: z.string().optional(),
+  onuSerial: z.string().max(40).regex(/^[0-9A-Za-z-]{4,40}$/, 'Serial inválido').optional(),
+  onuSlot: z.coerce.number().int().min(0).max(255).optional(),
+  onuPort: z.coerce.number().int().min(0).max(255).optional(),
+  syncRouter: z.enum(['on', 'off']).default('on'),
+  deviceModel: optionalText(60),
+  invoiceNow: z.literal('on').optional(),
+  invoiceMode: z.enum(['prorated', 'full']).default('prorated'),
+})
+
 export async function createCustomer(_: ActionState, formData: FormData): Promise<ActionState> {
-  let id: string
+  let target: string
   try {
     const user = await requireActionUser('customersWrite')
-    const { suspendExempt, ...data } = customerSchema.parse(formToObject(formData))
-    await assertZone(data.zoneId, user.tenantId)
-    const customer = await prisma.$transaction(async (tx) =>
-      tx.customer.create({
-        data: { ...data, suspendExempt: suspendExempt === 'on', code: await nextCustomerCode(tx, user.tenantId), tenantId: user.tenantId },
-      })
-    )
-    await audit({ tenantId: user.tenantId, userId: user.id, action: 'customer.create', entity: 'Customer', entityId: customer.id })
-    id = customer.id
+    const raw = formToObject(formData)
+    const { suspendExempt, status, ...data } = customerSchema.parse(raw)
+    const o = onboardingSchema.parse(raw)
+
+    const plan = o.planId ? await prisma.plan.findFirst({ where: { id: o.planId, tenantId: user.tenantId }, select: { kind: true, price: true } }) : null
+    if (o.planId && !plan) throw new Error('El plan elegido no existe.')
+    const fieldError = (field: string, message: string) => new z.ZodError([{ code: 'custom', path: [field], message }])
+    if (plan?.kind === 'PPPOE' && !o.pppoeUser) throw fieldError('pppoeUser', 'Obligatorio para planes PPPoE')
+    if ((o.discount ?? 0) > 0 && plan && (o.discount ?? 0) > Number(plan.price)) throw fieldError('discount', 'Mayor que el precio del plan')
+    if (o.newOnu && !o.onuSerial) throw fieldError('onuSerial', 'Obligatorio')
+    if (o.newOnu && !o.onuOltId) throw fieldError('onuOltId', 'Elige la OLT')
+
+    const r = await createCustomerWithService({
+      tenantId: user.tenantId,
+      userId: user.id,
+      customer: { ...data, status: status === 'PENDING' ? 'PENDING' : 'ACTIVE', suspendExempt: suspendExempt === 'on' },
+      service: plan
+        ? {
+            planId: o.planId!,
+            routerId: o.routerId ?? null,
+            mode: plan.kind === 'PPPOE' ? 'PPPoE' : o.mode === 'DHCP' ? 'DHCP' : 'STATIC_IP',
+            ipAddress: o.ipAddress ?? null,
+            ipv6: o.ipv6 ?? null,
+            macAddress: o.macAddress ? o.macAddress.toUpperCase().replace(/-/g, ':') : null,
+            pppoeUser: plan.kind === 'PPPOE' ? o.pppoeUser ?? null : null,
+            pppoePassword: plan.kind === 'PPPOE' ? o.pppoePassword ?? null : null,
+            lanInterface: o.lanInterface ?? null,
+            wanInterface: o.wanInterface ?? null,
+            discount: o.discount ?? 0,
+            discountNote: (o.discount ?? 0) > 0 ? o.discountNote ?? null : null,
+            accessType: o.accessType ?? null,
+            accessPoint: o.accessType === 'ANTENNA' ? o.accessPoint ?? null : null,
+            syncRouter: o.syncRouter === 'on',
+          }
+        : undefined,
+      deviceModel: o.deviceModel ?? null,
+      onu:
+        o.accessType === 'FIBER'
+          ? o.newOnu
+            ? { create: { oltId: o.onuOltId!, serial: o.onuSerial!, slot: o.onuSlot ?? 0, port: o.onuPort ?? 0 } }
+            : { existingId: o.onuId ?? null }
+          : undefined,
+      invoice: o.invoiceNow && plan ? { mode: o.invoiceMode } : null,
+    })
+    await audit({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'customer.create',
+      entity: 'Customer',
+      entityId: r.customer.id,
+      details: { serviceId: r.serviceId, invoice: r.invoice?.number ?? null, network: r.network?.message ?? null },
+    })
+    const notes = [
+      r.invoice ? `Factura ${r.invoice.number} generada.` : null,
+      r.network?.message ?? null,
+    ].filter(Boolean)
+    const q = new URLSearchParams()
+    if (notes.length) q.set('alta', notes.join(' '))
+    if (r.network && !r.network.ok) q.set('altaError', '1')
+    target = `/dashboard/customers/${r.customer.id}${q.toString() ? `?${q}` : ''}`
   } catch (error) {
     return toActionError(error)
   }
   revalidatePath('/dashboard/customers')
-  redirect(`/dashboard/customers/${id}`)
+  redirect(target)
 }
 
 export async function updateCustomer(id: string, _: ActionState, formData: FormData): Promise<ActionState> {

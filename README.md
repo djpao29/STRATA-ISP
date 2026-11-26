@@ -96,7 +96,7 @@ Grupo del menú con estas secciones:
 
 | Sección | Qué hace |
 | --- | --- |
-| Lista de clientes | Alta, edición, búsqueda y ficha del cliente (servicios, zona, facturas, pagos, tickets, equipos) |
+| Lista de clientes | Búsqueda y ficha del cliente. **Nuevo cliente** en una pantalla: datos (cédula opcional, correo y teléfono secundarios), ubicación en mapa (calles, satélite o híbrido, GPS, pin arrastrable, Plus Code), y servicio: MikroTik, IP con comprobación de IP libre/MAC, leases DHCP, IPv6, interfaz LAN, WAN preferida, plan (Simple Queue o PPPoE con usuario y clave), descuento mensual, zona, modelo de router, fibra (ONU existente o nueva) o antena, «Panel + MikroTik» (crea la cola simple o el usuario PPPoE en el router) o «Solo panel», y factura de instalación proporcional o completa |
 | Notificaciones push | Campañas de WhatsApp con plantillas aprobadas por Meta a clientes con deuda, cortados, activos, todos, una zona o un cliente. Los parámetros aceptan variables ({nombre}, {saldo}, {fecha_corte}, {plan}…), vista previa con el primer destinatario, envío en segundo plano con 3 reintentos, cancelación e historial por destinatario |
 | Tráfico | Conexión, velocidad actual y consumo de cada cliente leídos de todos los MikroTik con monitoreo activo (solo lectura), incluidas las sesiones PPPoE sin cliente en el sistema |
 | Instalaciones | Agenda de instalaciones con técnico, vistas de hoy / atrasadas / completadas; al completarla el cliente pasa de pendiente a activo |

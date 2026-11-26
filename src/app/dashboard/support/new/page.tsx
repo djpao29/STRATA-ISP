@@ -29,7 +29,7 @@ export default async function NewTicketPage({ searchParams }: { searchParams: { 
           ) : (
             <TicketForm
               action={createTicket}
-              customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName} · ${c.cedula}` }))}
+              customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName}${c.cedula ? ` · ${c.cedula}` : ''}` }))}
               users={users.map((u) => ({ value: u.id, label: `${u.name} (${ROLE_LABELS[u.role]})` }))}
               defaultCustomerId={customers.some((c) => c.id === searchParams.customerId) ? searchParams.customerId : undefined}
             />

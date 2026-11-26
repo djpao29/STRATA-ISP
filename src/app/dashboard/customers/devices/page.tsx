@@ -88,7 +88,7 @@ export default async function DevicesPage({ searchParams }: Props) {
           ) : (
             <DeviceForm
               action={saveDevice.bind(null, null)}
-              customers={fixedCustomer ? undefined : customers.map((c) => ({ value: c.id, label: `${c.lastName}, ${c.firstName} · ${c.cedula}` }))}
+              customers={fixedCustomer ? undefined : customers.map((c) => ({ value: c.id, label: `${c.lastName}, ${c.firstName}${c.cedula ? ` · ${c.cedula}` : ''}` }))}
               services={fixedCustomer ? serviceOptions(fixedCustomer.services) : undefined}
               submitLabel="Registrar equipo"
               fixedCustomerId={fixedCustomer?.id}

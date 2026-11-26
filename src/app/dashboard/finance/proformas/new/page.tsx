@@ -29,7 +29,7 @@ export default async function NewProformaPage() {
             action={createProforma}
             currency={user.tenant.currency}
             defaultValidUntil={toDateInput(addDays(todayIn(user.tenant.timezone), 15))}
-            customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName} · ${c.cedula}` }))}
+            customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName}${c.cedula ? ` · ${c.cedula}` : ''}` }))}
             plans={plans.map((p) => ({ name: p.name, price: p.price.toFixed(2) }))}
           />
         </CardContent>

@@ -76,7 +76,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
             <Link href={`/dashboard/customers/${invoice.customerId}`} className="font-medium hover:underline">
               {invoice.customer.firstName} {invoice.customer.lastName}
             </Link>
-            <div>Cédula/RUC {invoice.customer.cedula}</div>
+            {invoice.customer.cedula && <div>Cédula/RUC {invoice.customer.cedula}</div>}
             {invoice.customer.address && <div>{invoice.customer.address}</div>}
           </div>
 

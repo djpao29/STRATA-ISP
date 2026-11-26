@@ -192,12 +192,17 @@ model User {
 
 model Customer {
   id               String         @id @default(cuid())
-  cedula           String
+  /// Opcional: hay clientes sin cédula registrada.
+  cedula           String?
   firstName        String
   lastName         String
   email            String?
+  email2           String?
   phone            String
+  /// Teléfono secundario (también sirve para WhatsApp).
+  phone2           String?
   address          String?
+  province         String?
   city             String?
   neighborhood     String?
   coordinates      String? // "lat,lng"
@@ -267,6 +272,11 @@ model Plan {
   @@map("plans")
 }
 
+enum AccessType {
+  FIBER
+  ANTENNA
+}
+
 enum PlanKind {
   SIMPLE_QUEUE
   PPPOE
@@ -279,22 +289,37 @@ enum PlanCategory {
 
 /// Un servicio es un plan contratado por un cliente, opcionalmente asociado a un router.
 model Service {
-  id             String       @id @default(cuid())
-  customerId     String
-  planId         String
-  routerId       String?
-  mode           ClientMode   @default(PPPoE)
-  ipAddress      String?
-  macAddress     String?
-  pppoeUser      String?
-  isActive       Boolean      @default(true)
-  installedAt    DateTime     @default(now())
+  id               String       @id @default(cuid())
+  customerId       String
+  planId           String
+  routerId         String?
+  mode             ClientMode   @default(PPPoE)
+  ipAddress        String?
+  macAddress       String?
+  pppoeUser        String?
+  /// Clave PPPoE cifrada con ENCRYPTION_KEY (para crear el usuario en el MikroTik).
+  pppoePasswordEnc String?
+  ipv6             String?
+  /// Interfaz LAN del router por donde llega el cliente (referencia).
+  lanInterface     String?
+  /// WAN preferida para este cliente (referencia; vacío = automática).
+  wanInterface     String?
+  /// Descuento fijo mensual sobre el precio del plan.
+  discount         Decimal      @default(0) @db.Decimal(10, 2)
+  discountNote     String?
+  accessType       AccessType?
+  /// Antena: AP / sector al que se conecta.
+  accessPoint      String?
+  /// true = se configura también en el MikroTik; false = solo en el panel.
+  syncRouter       Boolean      @default(true)
+  isActive         Boolean      @default(true)
+  installedAt      DateTime     @default(now())
   /// Estado aplicado en el router (lo último que hizo el sistema).
-  networkState   NetworkState @default(ACTIVE)
-  networkStateAt DateTime?
-  tenantId       String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  networkState     NetworkState @default(ACTIVE)
+  networkStateAt   DateTime?
+  tenantId         String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   tenant         Tenant           @relation(fields: [tenantId], references: [id])
   customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)

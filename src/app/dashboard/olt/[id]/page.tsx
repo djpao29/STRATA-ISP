@@ -107,7 +107,7 @@ export default async function OltDetailPage({ params }: { params: { id: string }
           <CardContent>
             <OnuForm
               action={addOnu.bind(null, olt.id)}
-              customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName} · ${c.cedula}` }))}
+              customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName}${c.cedula ? ` · ${c.cedula}` : ''}` }))}
             />
           </CardContent>
         </Card>

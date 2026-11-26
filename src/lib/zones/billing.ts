@@ -40,8 +40,8 @@ export async function generateZoneInvoices(zone: Zone, timeZone: string, now = n
   let skipped = 0
   let errors = 0
   for (const s of services) {
-    // Planes sin precio (p. ej. importados del MikroTik y aún sin tarifa) no se facturan.
-    if (Number(s.plan.price) <= 0) {
+    // Planes sin precio (p. ej. importados del MikroTik y aún sin tarifa) o con descuento total no se facturan.
+    if (Number(s.plan.price) - Number(s.discount) <= 0) {
       skipped++
       continue
     }
@@ -67,8 +67,9 @@ export async function generateZoneInvoices(zone: Zone, timeZone: string, now = n
         await tx.invoice.create({
           data: {
             number: await nextInvoiceNumber(tx, zone.tenantId),
-            description: `Servicio de internet ${s.plan.name} · ${fmt(info.cycleDate)} al ${fmt(lastDay)}`,
-            amount: s.plan.price,
+            description: `Servicio de internet ${s.plan.name} · ${fmt(info.cycleDate)} al ${fmt(lastDay)}${Number(s.discount) > 0 ? ` (descuento ${s.discount.toFixed(2)})` : ''}`,
+            // Precio del plan menos el descuento fijo del servicio (nunca negativo).
+            amount: Prisma.Decimal.max(0, s.plan.price.minus(s.discount)),
             periodStart: info.cycleDate,
             periodEnd: info.periodEnd,
             issueDate: info.cycleDate,

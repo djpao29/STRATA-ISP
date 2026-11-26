@@ -73,7 +73,7 @@ export default async function ProformaPage({ params }: { params: { id: string } 
                 <Link href={`/dashboard/customers/${p.customer.id}`} className="font-medium hover:underline">
                   {p.customer.firstName} {p.customer.lastName}
                 </Link>
-                <div>Cédula/RNC {p.customer.cedula}</div>
+                {p.customer.cedula && <div>Cédula/RNC {p.customer.cedula}</div>}
                 {p.customer.address && <div>{p.customer.address}</div>}
               </>
             ) : (
@@ -131,7 +131,7 @@ export default async function ProformaPage({ params }: { params: { id: string } 
                 action={convertProforma.bind(null, p.id)}
                 needsCustomer={!p.customerId}
                 defaultDueDate={toDateInput(addDays(todayIn(user.tenant.timezone), p.tenant.dueDays))}
-                customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName} · ${c.cedula}` }))}
+                customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName}${c.cedula ? ` · ${c.cedula}` : ''}` }))}
               />
             </CardContent>
           </Card>

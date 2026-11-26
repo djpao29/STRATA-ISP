@@ -219,6 +219,8 @@ const QUEUE_FIELDS = ['max-limit', 'priority', 'burst-limit', 'burst-threshold',
 const WRITE_RULES: Array<{ method: 'PUT' | 'PATCH' | 'DELETE'; path: RegExp; fields?: string[] }> = [
   // Habilitar / deshabilitar el usuario PPP del cliente, o asignarle el perfil de su plan.
   { method: 'PATCH', path: new RegExp(`^/ppp/secret/${ID}$`), fields: ['disabled', 'profile'] },
+  // Alta del usuario PPPoE de un cliente nuevo (nunca se borra ni se cambia su clave desde aquí).
+  { method: 'PUT', path: /^\/ppp\/secret$/, fields: ['name', 'password', 'profile', 'service', 'comment', 'remote-address'] },
   // Perfiles PPP de los planes PPPoE: crear o ajustar la velocidad.
   { method: 'PUT', path: /^\/ppp\/profile$/, fields: ['name', 'rate-limit', 'comment'] },
   { method: 'PATCH', path: new RegExp(`^/ppp/profile/${ID}$`), fields: ['rate-limit'] },

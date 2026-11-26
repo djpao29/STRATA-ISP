@@ -34,7 +34,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: {
           ) : (
             <InvoiceForm
               action={createInvoice}
-              customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName} · ${c.cedula}` }))}
+              customers={customers.map((c) => ({ value: c.id, label: `${c.lastName} ${c.firstName}${c.cedula ? ` · ${c.cedula}` : ''}` }))}
               defaultCustomerId={customers.some((c) => c.id === searchParams.customerId) ? searchParams.customerId : undefined}
               defaultDueDate={toDateInput(addDays(todayIn(user.tenant.timezone), tenant.dueDays))}
             />

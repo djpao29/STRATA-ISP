@@ -120,7 +120,7 @@ export default async function InstallationsPage({ searchParams }: Props) {
               technicians={techOptions}
               customers={pendingCustomers.map((c) => ({
                 value: c.id,
-                label: `${c.lastName} ${c.firstName} · ${c.cedula}${c.status === 'PENDING' ? ' · POR INSTALAR' : ''}`,
+                label: `${c.lastName} ${c.firstName}${c.cedula ? ` · ${c.cedula}` : ''}${c.status === 'PENDING' ? ' · POR INSTALAR' : ''}`,
               }))}
             />
           )}

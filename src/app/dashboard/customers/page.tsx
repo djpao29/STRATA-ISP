@@ -104,7 +104,7 @@ export default async function CustomersPage({ searchParams }: Props) {
               </Link>
               {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
             </td>
-            <td>{c.cedula}</td>
+            <td>{c.cedula ?? "—"}</td>
             <td>{c.phone}</td>
             <td>{c.zone?.name ?? <span className="text-amber-700">Sin zona</span>}</td>
             <td>{c.services.map((s) => s.plan.name).join(', ') || '—'}</td>

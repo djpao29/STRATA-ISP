@@ -109,3 +109,45 @@ export async function ensureClientQueue(conn: RouterConnection, client: { name: 
   }
   return 'unchanged' as const
 }
+
+/** Crea el usuario PPPoE del cliente (o, si ya existe, le asigna el perfil). Nunca cambia la clave de uno existente. */
+export async function ensurePppSecret(
+  conn: RouterConnection,
+  secret: { name: string; password: string | null; profile: string; remoteAddress?: string | null; comment: string }
+) {
+  const rows = await rosGet<RosRecord[]>(conn, '/ppp/secret', ['.id', 'name', 'profile'], { name: secret.name })
+  const current = rows.find((r) => r.name === secret.name)
+  if (current) {
+    if (current.profile !== secret.profile && current['.id']) {
+      await rosWrite(conn, 'PATCH', `/ppp/secret/${current['.id']}`, { profile: secret.profile })
+      return 'updated' as const
+    }
+    return 'unchanged' as const
+  }
+  if (!secret.password) throw new RouterOSError(`El usuario PPPoE "${secret.name}" no existe en el router y no se indicó clave para crearlo.`, 'bad_request')
+  await rosWrite(conn, 'PUT', '/ppp/secret', {
+    name: secret.name,
+    password: secret.password,
+    profile: secret.profile,
+    service: 'pppoe',
+    comment: secret.comment.slice(0, 120),
+    ...(secret.remoteAddress ? { 'remote-address': secret.remoteAddress } : {}),
+  })
+  return 'created' as const
+}
+
+/** Leases del servidor DHCP (solo lectura). */
+export async function getDhcpLeases(conn: RouterConnection) {
+  const rows = await rosGetOptional<RosRecord[]>(conn, '/ip/dhcp-server/lease', ['address', 'mac-address', 'host-name', 'status', 'dynamic', 'comment', 'server'])
+  return (rows ?? [])
+    .filter((r) => r.address)
+    .map((r) => ({
+      address: r.address ?? '',
+      mac: r['mac-address'] || null,
+      hostName: r['host-name'] || null,
+      status: r.status || null,
+      dynamic: r.dynamic === 'true',
+      comment: r.comment || null,
+      server: r.server || null,
+    }))
+}
