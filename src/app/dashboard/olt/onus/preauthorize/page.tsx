@@ -38,7 +38,7 @@ export default async function PreauthorizePage() {
           ) : (
             <InlineForm action={preauthorizeOnu} submitLabel="Pre-autorizar">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <TextField name="serial" label="Serial GPON" required placeholder="HWTC1A2B3C4D" className="[&_input]:font-mono [&_input]:uppercase" />
+                <TextField name="serial" label="Serial (GPON) o MAC (EPON)" required placeholder="HWTC1A2B3C4D o 00:1E:A5:11:22:33" className="[&_input]:font-mono [&_input]:uppercase" />
                 <SelectField name="oltId" label="OLT" required options={opts.olts} defaultValue={opts.olts[0]?.value} />
               </div>
               <OnuLinkFields {...opts} />

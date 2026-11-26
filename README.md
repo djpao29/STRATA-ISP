@@ -92,8 +92,14 @@ router se hace desde el servidor; el navegador nunca recibe credenciales.
 
 ## OLT (GPON)
 
-Huawei (MA5608T/MA5683T/MA5800), ZTE (C300/C320/C600) y VSOL. Cada OLT se lee cada pocos minutos (configurable en Alertas).
-Huawei y ZTE se leen por SNMP v2c (solo lectura); VSOL por consola. Las ONUs se autorizan por Telnet o SSH.
+Huawei (MA5608T/MA5683T/MA5800), ZTE (C300/C320/C600), VSOL, Hioso (EPON), C-Data y BDCOM. GPON (ONUs por serial) y EPON (ONUs por MAC).
+Cada OLT se lee cada pocos minutos (configurable en Alertas). Huawei y ZTE leen las ONUs por SNMP; VSOL, Hioso, C-Data y BDCOM por consola,
+con comandos de lectura editables por OLT. SNMP v2c o v3 (MD5/SHA, DES/AES) da además modelo, firmware y tiempo encendida en todas las marcas.
+Las ONUs se autorizan por Telnet o SSH con plantillas editables. En la página de cada OLT, «Probar SNMP» y «Probar consola»
+(solo comandos de consulta) muestran la respuesta real del equipo para ajustar las plantillas al firmware.
+
+El arranque usa `node --openssl-legacy-provider` (en npm run dev/start y en Docker) porque muchas OLT usan SNMP v3 con DES,
+que OpenSSL 3 deshabilita por defecto.
 
 | Sección | Qué hace |
 | --- | --- |

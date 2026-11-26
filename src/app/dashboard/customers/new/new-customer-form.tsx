@@ -345,7 +345,7 @@ export function NewCustomerForm({
                   <div className="space-y-2 rounded-md border bg-gray-50 p-3">
                     <input type="hidden" name="newOnu" value="on" />
                     <SelectField name="onuOltId" label="OLT" required options={fiber.olts} defaultValue={fiber.olts[0]?.value} />
-                    <TextField name="onuSerial" label="Serial GPON de la ONU" required maxLength={16} placeholder="HWTC1A2B3C4D" className="[&_input]:font-mono [&_input]:uppercase" />
+                    <TextField name="onuSerial" label="Serial (GPON) o MAC (EPON) de la ONU" required maxLength={17} placeholder="HWTC1A2B3C4D o 00:1E:A5:11:22:33" className="[&_input]:font-mono [&_input]:uppercase" />
                     <p className="text-xs text-muted-foreground">
                       Si la OLT ya la detecta, se autoriza al guardar; si todavía no está conectada, queda pre-autorizada y se autoriza sola cuando aparezca.
                     </p>

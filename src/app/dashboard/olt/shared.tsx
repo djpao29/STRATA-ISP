@@ -2,7 +2,7 @@ import type { ONUStatus, OltBrand, OnuAuthState } from '@prisma/client'
 import { cn } from '@/lib/utils'
 import { ONU_STATUS_LABEL } from '@/lib/olt/labels'
 
-export const BRAND_LABEL: Record<OltBrand, string> = { HUAWEI: 'Huawei', ZTE: 'ZTE', VSOL: 'VSOL' }
+export const BRAND_LABEL: Record<OltBrand, string> = { HUAWEI: 'Huawei', ZTE: 'ZTE', VSOL: 'VSOL', HIOSO: 'Hioso', CDATA: 'C-Data', BDCOM: 'BDCOM' }
 export const AUTH_LABEL: Record<OnuAuthState, string> = {
   AUTHORIZED: 'Autorizada',
   PREAUTHORIZED: 'Pre-autorizada',

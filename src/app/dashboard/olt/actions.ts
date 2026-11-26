@@ -9,15 +9,19 @@ import { audit } from '@/lib/audit'
 import { encrypt } from '@/lib/crypto'
 import { HOST_REGEX } from '@/lib/net'
 import { formToObject, toActionError, type ActionState } from '@/lib/actions'
-import { authorizeOnu, pollOlt } from '@/lib/olt/service'
+import { authorizeOnu, driverConfig, pollOlt, snmpTarget } from '@/lib/olt/service'
+import { SNMP_BRANDS } from '@/lib/olt/drivers'
+import { normalizeOnuId, testConsole } from '@/lib/olt/console'
+import { systemInfo } from '@/lib/olt/snmp'
 
 const refresh = () => revalidatePath('/dashboard/olt', 'layout')
 const coords = z.string().regex(/^-?\d{1,2}(\.\d+)?,\s*-?\d{1,3}(\.\d+)?$/, 'Formato: latitud,longitud').optional()
 const optInt = (min: number, max: number) => z.coerce.number().int().min(min).max(max).optional()
+/** Serial GPON (HWTC1A2B3C4D) o MAC EPON (aa:bb:cc:dd:ee:ff, aabb.ccdd.eeff…), normalizado. */
 const serialRule = z
   .string({ required_error: 'Obligatorio' })
-  .regex(/^[A-Za-z0-9]{8,16}$/, 'Serial GPON de 8 a 16 caracteres (ej. HWTC1A2B3C4D)')
-  .transform((v) => v.toUpperCase())
+  .refine((v) => normalizeOnuId(v) !== null, 'Serial GPON (ej. HWTC1A2B3C4D) o MAC EPON (ej. 00:1E:A5:11:22:33)')
+  .transform((v) => normalizeOnuId(v)!)
 
 async function ownOlt(id: string, tenantId: string) {
   const olt = await prisma.oLT.findFirst({ where: { id, tenantId } })
@@ -42,8 +46,19 @@ async function checkRefs(tenantId: string, r: { customerId?: string; onuModelId?
 
 const oltSchema = z.object({
   name: z.string({ required_error: 'Obligatorio' }).max(100),
-  brand: z.enum(['HUAWEI', 'ZTE', 'VSOL']),
+  brand: z.enum(['HUAWEI', 'ZTE', 'VSOL', 'HIOSO', 'CDATA', 'BDCOM']),
   vendor: z.string().max(60).optional(),
+  softwareVersion: z.string().max(60).optional(),
+  ponType: z.enum(['GPON', 'EPON', 'GPON_EPON']).default('GPON'),
+  snmpVersion: z.enum(['2c', '3']).default('2c'),
+  snmpV3User: z.string().max(60).optional(),
+  snmpV3Level: z.enum(['noAuthNoPriv', 'authNoPriv', 'authPriv']).default('authPriv'),
+  snmpV3AuthProto: z.enum(['MD5', 'SHA']).default('MD5'),
+  snmpV3AuthKey: z.string().min(8, 'Mínimo 8 caracteres (SNMP v3)').max(120).optional(),
+  snmpV3PrivProto: z.enum(['DES', 'AES']).default('DES'),
+  snmpV3PrivKey: z.string().min(8, 'Mínimo 8 caracteres (SNMP v3)').max(120).optional(),
+  readTemplate: z.string().max(4000).optional(),
+  autofindTemplate: z.string().max(4000).optional(),
   host: z.string({ required_error: 'Obligatorio' }).regex(HOST_REGEX, 'IP o nombre de host inválido'),
   port: z.coerce.number().int().min(1).max(65535).default(161),
   community: z.string().max(100).optional(),
@@ -65,10 +80,17 @@ export async function saveOlt(id: string | null, _: ActionState, formData: FormD
   let target: string | null = null
   try {
     const user = await requireActionUser('olt')
-    const { community, cliPassword, enablePassword, pollEnabled, ...d } = oltSchema.parse(formToObject(formData))
+    const { community, cliPassword, enablePassword, pollEnabled, snmpV3AuthKey, snmpV3PrivKey, ...d } = oltSchema.parse(formToObject(formData))
+    if (d.snmpVersion === '3' && !d.snmpV3User) return { error: 'Revisa los campos marcados.', fieldErrors: { snmpV3User: ['Obligatorio con SNMP v3'] } }
     const data = {
       ...d,
       vendor: d.vendor ?? null,
+      softwareVersion: d.softwareVersion ?? null,
+      snmpV3User: d.snmpV3User ?? null,
+      readTemplate: d.readTemplate ?? null,
+      autofindTemplate: d.autofindTemplate ?? null,
+      ...(snmpV3AuthKey ? { snmpV3AuthKeyEnc: encrypt(snmpV3AuthKey) } : {}),
+      ...(snmpV3PrivKey ? { snmpV3PrivKeyEnc: encrypt(snmpV3PrivKey) } : {}),
       cliUsername: d.cliUsername ?? null,
       coordinates: d.coordinates ?? null,
       lineProfile: d.lineProfile ?? null,
@@ -85,7 +107,10 @@ export async function saveOlt(id: string | null, _: ActionState, formData: FormD
       await prisma.oLT.update({ where: { id }, data })
       await audit({ tenantId: user.tenantId, userId: user.id, action: 'olt.update', entity: 'OLT', entityId: id })
     } else {
-      if (!community && d.brand !== 'VSOL') return { error: 'Revisa los campos marcados.', fieldErrors: { community: ['Obligatoria para Huawei y ZTE (lectura SNMP)'] } }
+      if (!community && d.snmpVersion === '2c' && SNMP_BRANDS.includes(d.brand))
+        return { error: 'Revisa los campos marcados.', fieldErrors: { community: ['Obligatoria para Huawei y ZTE (lectura SNMP)'] } }
+      if (!SNMP_BRANDS.includes(d.brand) && !(d.cliUsername && cliPassword))
+        return { error: 'Revisa los campos marcados.', fieldErrors: { cliUsername: ['Esta marca se lee por consola: usuario y clave son obligatorios'] } }
       const olt = await prisma.oLT.create({ data: { ...data, communityEnc: data.communityEnc ?? encrypt(''), tenantId: user.tenantId } })
       await audit({ tenantId: user.tenantId, userId: user.id, action: 'olt.create', entity: 'OLT', entityId: olt.id })
       target = `/dashboard/olt/${olt.id}`
@@ -398,5 +423,43 @@ export async function resolveEvent(_: ActionState, formData: FormData): Promise<
     return { ok: true, message: 'Evento cerrado' }
   } catch (error) {
     return toActionError(error)
+  }
+}
+
+// ── Pruebas de conexión ─────────────────────────────────────────────────────
+
+/** «Probar consola»: ejecuta comandos de solo consulta y devuelve la salida para ajustar las plantillas. */
+export async function probeConsole(oltId: string, commands: string) {
+  try {
+    const user = await requireActionUser('olt')
+    const olt = await ownOlt(oltId, user.tenantId)
+    const cli = driverConfig(olt).cli
+    if (!cli) return { error: 'Configura primero el usuario y la clave de consola de esta OLT.' }
+    const r = await testConsole(cli, commands)
+    await audit({ tenantId: user.tenantId, userId: user.id, action: 'olt.console', entity: 'OLT', entityId: olt.id, details: { commands: commands.slice(0, 500) } })
+    return {
+      output: r.output,
+      onus: r.onus.slice(0, 50).map((o) => `${o.slot}/${o.port}:${o.onuId} ${o.serial} · ${o.status}${o.rxPower != null ? ` · ${o.rxPower} dBm` : ''}`),
+      onuCount: r.onus.length,
+      discovered: r.discovered.slice(0, 50).map((d) => `${d.slot}/${d.port} ${d.serial}`),
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Error desconocido' }
+  }
+}
+
+/** «Probar SNMP»: lee descripción, nombre y tiempo encendida (estándar en todas las marcas). */
+export async function probeSnmp(oltId: string) {
+  try {
+    const user = await requireActionUser('olt')
+    const olt = await ownOlt(oltId, user.tenantId)
+    const target = snmpTarget(olt)
+    if (!target) return { error: 'Esta OLT no tiene SNMP configurado (comunidad o usuario v3).' }
+    const info = await systemInfo(target)
+    await prisma.oLT.update({ where: { id: olt.id }, data: { sysDescr: info.descr?.slice(0, 300) ?? null } })
+    refresh()
+    return { info }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Error desconocido' }
   }
 }

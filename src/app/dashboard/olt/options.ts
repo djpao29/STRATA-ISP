@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { AUTH_TEMPLATES } from '@/lib/olt/drivers'
+import { CONSOLE_DEFAULTS } from '@/lib/olt/console'
 
 /** Listas para los formularios de ONU. */
 export async function onuOptions(tenantId: string) {
@@ -23,4 +24,9 @@ export async function onuOptions(tenantId: string) {
   }
 }
 
-export const templates = AUTH_TEMPLATES as Record<string, string>
+/** Plantillas por defecto de cada marca (autorizar y leer por consola), para mostrarlas en el formulario. */
+export const templates = {
+  auth: AUTH_TEMPLATES as Record<string, string>,
+  read: Object.fromEntries(Object.entries(CONSOLE_DEFAULTS).map(([k, v]) => [k, v!.read])),
+  autofind: Object.fromEntries(Object.entries(CONSOLE_DEFAULTS).map(([k, v]) => [k, v!.autofind])),
+}

@@ -1,6 +1,7 @@
 import type { OltBrand, ONUStatus } from '@prisma/client'
 import { get, gponSerial, indexOf, num, text, walk, type SnmpTarget, type Varbind } from './snmp'
 import { runCli, type CliTarget } from './cli'
+import { macForms, readByConsole } from './console'
 
 /**
  * Lectura de OLTs por marca. Huawei y ZTE se leen por SNMP (MIBs del fabricante); VSOL por consola.
@@ -20,7 +21,18 @@ export type OnuReading = {
 export type Discovery = { slot: number; port: number; serial: string; equipment: string | null }
 export type OltReading = { uptimeSec: number | null; temperature: number | null; onus: OnuReading[]; discovered: Discovery[] }
 
-export type DriverConfig = { brand: OltBrand; frame: number; snmp: SnmpTarget | null; cli: CliTarget | null }
+export type DriverConfig = {
+  brand: OltBrand
+  frame: number
+  snmp: SnmpTarget | null
+  cli: CliTarget | null
+  /** Comandos de lectura propios de la OLT (marcas leídas por consola). */
+  readTemplate?: string | null
+  autofindTemplate?: string | null
+}
+
+/** Marcas que se leen por SNMP; el resto, por consola con plantillas. */
+export const SNMP_BRANDS: OltBrand[] = ['HUAWEI', 'ZTE']
 
 const SYS_UPTIME = '1.3.6.1.2.1.1.3.0'
 
@@ -238,27 +250,32 @@ export function parseVsolAutofind(output: string): Discovery[] {
   return out
 }
 
-async function readVsol(c: DriverConfig): Promise<OltReading> {
-  if (!c.cli) throw new Error('Las OLT VSOL se leen por consola: configura usuario y clave de Telnet/SSH.')
-  const r = await runCli(c.cli, ['enable', 'terminal length 0', 'configure terminal', 'show onu info', 'show onu auto-find', 'exit'], { stopOnError: false })
-  const up = c.snmp ? await get(c.snmp, [SYS_UPTIME]).catch(() => [null]) : [null]
-  return { uptimeSec: uptime(up[0]), temperature: null, onus: parseVsolOnus(r.all), discovered: parseVsolAutofind(r.all).filter((d) => !parseVsolOnus(r.all).some((o) => o.serial === d.serial)) }
-}
-
 function uptime(v: Varbind['value'] | undefined) {
   const n = num(v ?? null)
   return n == null ? null : Math.floor(n / 100) // timeticks (centésimas)
 }
 
+/** Lectura por consola (VSOL, Hioso, C-Data, BDCOM). El tiempo encendida sale por SNMP si hay comunidad. */
+async function readConsoleBrand(c: DriverConfig): Promise<OltReading> {
+  if (!c.cli) throw new Error('Esta marca se lee por consola: configura usuario y clave de Telnet/SSH.')
+  const { onus, discovered } = await readByConsole(c.cli, c.brand, c.readTemplate ?? null, c.autofindTemplate ?? null)
+  const up = c.snmp ? await get(c.snmp, [SYS_UPTIME]).catch(() => [null]) : [null]
+  return { uptimeSec: uptime(up[0]), temperature: null, onus, discovered }
+}
+
 export async function readOlt(c: DriverConfig): Promise<OltReading> {
-  if (c.brand === 'VSOL') return readVsol(c)
+  if (!SNMP_BRANDS.includes(c.brand)) return readConsoleBrand(c)
   if (!c.snmp) throw new Error('Falta la comunidad SNMP de la OLT.')
   return c.brand === 'ZTE' ? readZte(c) : readHuawei(c)
 }
 
 // ── Autorización ────────────────────────────────────────────────────────────
 
-/** Plantillas por defecto. Variables: {frame} {slot} {port} {onuId} {serial} {desc} {lineProfile} {srvProfile} {vlan} {type}. */
+/**
+ * Plantillas por defecto. Variables: {frame} {slot} {port} {onuId} {serial} {desc} {lineProfile} {srvProfile} {vlan} {type},
+ * y para EPON la MAC en cada formato: {mac} (AA:BB:CC:DD:EE:FF) {macDot} (aabb.ccdd.eeff) {macDash} {macPlain}.
+ * Las de Hioso, C-Data y BDCOM siguen la sintaxis habitual de esas marcas; verifícalas con tu firmware.
+ */
 export const AUTH_TEMPLATES: Record<OltBrand, string> = {
   HUAWEI: [
     'enable',
@@ -297,6 +314,36 @@ export const AUTH_TEMPLATES: Record<OltBrand, string> = {
     'exit',
     'write',
   ].join('\n'),
+  HIOSO: [
+    'enable',
+    'configure terminal',
+    'interface epon {frame}/{port}',
+    'onu bind {onuId} mac {mac}',
+    'onu {onuId} description {desc}',
+    'exit',
+    'exit',
+    'write',
+  ].join('\n'),
+  CDATA: [
+    'enable',
+    'config',
+    'interface epon {frame}/{slot}',
+    'ont add {port} {onuId} mac {mac} ont-lineprofile-id {lineProfile} ont-srvprofile-id {srvProfile} desc {desc}',
+    'exit',
+    'save',
+  ].join('\n'),
+  BDCOM: [
+    'enable',
+    'config',
+    'interface epon{frame}/{port}',
+    'epon bind-onu sequence {onuId} mac {macDot}',
+    'exit',
+    'interface epon{frame}/{port}:{onuId}',
+    'description {desc}',
+    'exit',
+    'exit',
+    'write all',
+  ].join('\n'),
 }
 
 export type AuthVars = { frame: number; slot: number; port: number; onuId: number; serial: string; desc: string; lineProfile: string; srvProfile: string; vlan: number | string; type: string }
@@ -315,6 +362,7 @@ export function authCommands(template: string, v: AuthVars) {
     srvProfile: v.srvProfile,
     vlan: String(v.vlan),
     type: v.type,
+    ...macForms(v.serial.toUpperCase()),
   }
   const lines = template
     .split(/\r?\n/)

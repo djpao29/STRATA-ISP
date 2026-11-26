@@ -7,8 +7,8 @@ import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/session'
 import { formatDateTime } from '@/lib/format'
 import { getOltSettings } from '@/lib/olt/service'
-import { deleteOlt, pollNow, saveOlt } from '../actions'
-import { OltForm } from '../forms'
+import { deleteOlt, pollNow, probeConsole, probeSnmp, saveOlt } from '../actions'
+import { OltForm, OltProbes } from '../forms'
 import { templates } from '../options'
 import { BRAND_LABEL, OnuStatus, RxPower, fmtUptime, pon } from '../shared'
 
@@ -39,7 +39,7 @@ export default async function OltDetailPage({ params }: { params: { id: string }
     <div className="space-y-6">
       <PageHeader
         title={olt.name}
-        description={`${BRAND_LABEL[olt.brand]}${olt.vendor ? ` ${olt.vendor}` : ''} · ${olt.host} · ${olt.status === 'ONLINE' ? 'en línea' : olt.status === 'OFFLINE' ? 'sin respuesta' : 'sin leer'}${olt.lastPollAt ? ` · leída ${formatDateTime(olt.lastPollAt, tz)}` : ''}`}
+        description={`${BRAND_LABEL[olt.brand]}${olt.vendor ? ` ${olt.vendor}` : ''} · ${olt.ponType === 'GPON_EPON' ? 'GPON + EPON' : olt.ponType} · ${olt.host} · ${olt.status === 'ONLINE' ? 'en línea' : olt.status === 'OFFLINE' ? 'sin respuesta' : 'sin leer'}${olt.lastPollAt ? ` · leída ${formatDateTime(olt.lastPollAt, tz)}` : ''}`}
       >
         <ActionButton action={pollNow} fields={{ id: olt.id }}>
           Leer ahora
@@ -49,6 +49,7 @@ export default async function OltDetailPage({ params }: { params: { id: string }
         </ActionButton>
       </PageHeader>
 
+      {olt.sysDescr && <p className="text-xs text-muted-foreground">Equipo (SNMP): {olt.sysDescr}</p>}
       {olt.lastError && <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">Última lectura: {olt.lastError}</p>}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -117,6 +118,20 @@ export default async function OltDetailPage({ params }: { params: { id: string }
 
       <Card>
         <CardHeader>
+          <CardTitle>Probar conexión</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <OltProbes
+            oltId={olt.id}
+            probeConsole={probeConsole}
+            probeSnmp={probeSnmp}
+            defaultCommands={olt.readTemplate?.trim() || templates.read[olt.brand] || 'enable\nshow version'}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Configuración</CardTitle>
         </CardHeader>
         <CardContent>
@@ -128,6 +143,16 @@ export default async function OltDetailPage({ params }: { params: { id: string }
               name: olt.name,
               brand: olt.brand,
               vendor: olt.vendor,
+              softwareVersion: olt.softwareVersion,
+              ponType: olt.ponType,
+              snmpVersion: olt.snmpVersion,
+              snmpV3User: olt.snmpV3User,
+              snmpV3Level: olt.snmpV3Level,
+              snmpV3AuthProto: olt.snmpV3AuthProto,
+              snmpV3PrivProto: olt.snmpV3PrivProto,
+              hasV3Keys: !!olt.snmpV3AuthKeyEnc,
+              readTemplate: olt.readTemplate,
+              autofindTemplate: olt.autofindTemplate,
               host: olt.host,
               port: olt.port,
               cliProtocol: olt.cliProtocol,

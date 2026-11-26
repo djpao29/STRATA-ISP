@@ -1,24 +1,56 @@
 import snmp from 'net-snmp'
 
-/** Lectura SNMP v2c de una OLT (solo lectura: nunca se hace SET). */
-export type SnmpTarget = { host: string; port: number; community: string; timeoutMs?: number }
+/** Lectura SNMP (v2c con comunidad o v3 con usuario) de una OLT. Solo lectura: nunca se hace SET. */
+export type SnmpV3 = {
+  user: string
+  level: 'noAuthNoPriv' | 'authNoPriv' | 'authPriv'
+  authProtocol?: 'MD5' | 'SHA'
+  authKey?: string
+  privProtocol?: 'DES' | 'AES'
+  privKey?: string
+}
+export type SnmpTarget = { host: string; port: number; community: string; v3?: SnmpV3 | null; timeoutMs?: number }
 export type Varbind = { oid: string; value: Buffer | number | string | null }
 
 export class SnmpError extends Error {}
 
 function session(t: SnmpTarget) {
-  return snmp.createSession(t.host, t.community, {
-    port: t.port,
-    version: snmp.Version2c,
-    timeout: t.timeoutMs ?? 4000,
-    retries: 1,
-  })
+  const options = { port: t.port, timeout: t.timeoutMs ?? 4000, retries: 1 }
+  if (t.v3) {
+    const level = { noAuthNoPriv: snmp.SecurityLevel.noAuthNoPriv, authNoPriv: snmp.SecurityLevel.authNoPriv, authPriv: snmp.SecurityLevel.authPriv }[t.v3.level]
+    return snmp.createV3Session(
+      t.host,
+      {
+        name: t.v3.user,
+        level,
+        ...(t.v3.level !== 'noAuthNoPriv'
+          ? { authProtocol: t.v3.authProtocol === 'SHA' ? snmp.AuthProtocols.sha : snmp.AuthProtocols.md5, authKey: t.v3.authKey ?? '' }
+          : {}),
+        ...(t.v3.level === 'authPriv' ? { privProtocol: t.v3.privProtocol === 'AES' ? snmp.PrivProtocols.aes : snmp.PrivProtocols.des, privKey: t.v3.privKey ?? '' } : {}),
+      },
+      { ...options, version: snmp.Version3 }
+    )
+  }
+  return snmp.createSession(t.host, t.community, { ...options, version: snmp.Version2c })
 }
 
 function describe(err: unknown, t: SnmpTarget) {
   const msg = err instanceof Error ? err.message : String(err)
-  if (/timed? ?out/i.test(msg)) return new SnmpError(`La OLT ${t.host}:${t.port} no respondió por SNMP (revisa IP, puerto, comunidad y que SNMP esté habilitado).`)
+  if (/timed? ?out/i.test(msg))
+    return new SnmpError(`La OLT ${t.host}:${t.port} no respondió por SNMP (revisa IP, puerto, ${t.v3 ? 'usuario y claves v3' : 'comunidad'} y que SNMP esté habilitado).`)
+  if (/digital envelope|unsupported/i.test(msg))
+    return new SnmpError('SNMP v3: este servidor no tiene habilitado el cifrado DES (OpenSSL 3). Arranca el sistema con «node --openssl-legacy-provider» (ya incluido en npm run dev/start y en Docker) o usa AES en la OLT.')
+  if (/authentication|wrong digest|decryption|unknown user/i.test(msg)) return new SnmpError(`SNMP v3 ${t.host}: usuario o claves incorrectos (${msg}).`)
   return new SnmpError(`SNMP ${t.host}: ${msg}`)
+}
+
+const SYS = { descr: '1.3.6.1.2.1.1.1.0', uptime: '1.3.6.1.2.1.1.3.0', name: '1.3.6.1.2.1.1.5.0' }
+
+/** Datos estándar del equipo (cualquier marca): descripción (modelo/firmware), nombre y tiempo encendida. */
+export async function systemInfo(t: SnmpTarget) {
+  const [descr, uptime, name] = await get(t, [SYS.descr, SYS.uptime, SYS.name])
+  const ticks = num(uptime)
+  return { descr: text(descr), name: text(name), uptimeSec: ticks == null ? null : Math.floor(ticks / 100) }
 }
 
 /** Recorre un subárbol completo (GETBULK). */

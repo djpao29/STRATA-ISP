@@ -123,6 +123,16 @@ enum OltBrand {
   HUAWEI
   ZTE
   VSOL
+  HIOSO
+  CDATA
+  BDCOM
+}
+
+/// Tecnología PON de la OLT: GPON identifica ONUs por serial; EPON por MAC.
+enum PonType {
+  GPON
+  EPON
+  GPON_EPON
 }
 
 enum CliProtocol {
@@ -668,6 +678,26 @@ model OLT {
   defaultVlan       Int?
   /// Plantilla de comandos propia para autorizar (vacía = la de la marca).
   authTemplate      String?
+  ponType           PonType     @default(GPON)
+  softwareVersion   String?
+  /// Comandos de consola para leer las ONUs autorizadas (vacío = los de la marca).
+  readTemplate      String?
+  /// Comandos de consola para leer las ONUs sin autorizar (vacío = los de la marca).
+  autofindTemplate  String?
+  /// "2c" (comunidad) o "3" (usuario con autenticación/cifrado).
+  snmpVersion       String      @default("2c")
+  snmpV3User        String?
+  /// noAuthNoPriv | authNoPriv | authPriv
+  snmpV3Level       String?
+  /// MD5 | SHA
+  snmpV3AuthProto   String?
+  /// Cifradas con ENCRYPTION_KEY.
+  snmpV3AuthKeyEnc  String?
+  /// DES | AES
+  snmpV3PrivProto   String?
+  snmpV3PrivKeyEnc  String?
+  /// Descripción del equipo leída por SNMP (modelo y firmware).
+  sysDescr          String?
   tenantId          String
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt

@@ -11,6 +11,7 @@ import { ensureClientQueue, ensurePppProfile, ensurePppSecret } from '@/lib/mikr
 import type { RosRecord } from '@/lib/mikrotik/parse'
 import { getMonitoringSettings } from '@/lib/monitoring/settings'
 import { authorizeOnu } from '@/lib/olt/service'
+import { normalizeOnuId } from '@/lib/olt/console'
 
 const DAY = 86_400_000
 
@@ -105,7 +106,7 @@ export async function createCustomerWithService(input: NewCustomerInput) {
     onuPlan = { kind: 'authorize', oltId: d.oltId, serial: d.serial, slot: d.slot, port: d.port }
   } else if (input.onu?.preauthorize) {
     const { oltId } = input.onu.preauthorize
-    const serial = input.onu.preauthorize.serial.toUpperCase()
+    const serial = normalizeOnuId(input.onu.preauthorize.serial) ?? input.onu.preauthorize.serial.toUpperCase()
     if (!(await prisma.oLT.findFirst({ where: { id: oltId, tenantId } }))) throw new Error('La OLT elegida no existe.')
     if (await prisma.oNU.findFirst({ where: { serial, olt: { tenantId } } })) throw new Error(`La ONU ${serial} ya está registrada en el sistema.`)
     const d = await prisma.onuDiscovery.findFirst({ where: { oltId, serial, active: true } })

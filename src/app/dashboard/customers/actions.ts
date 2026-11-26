@@ -8,6 +8,7 @@ import { requireActionUser } from '@/lib/session'
 import { audit } from '@/lib/audit'
 import { formToObject, optionalText, toActionError, type ActionState } from '@/lib/actions'
 import { createCustomerWithService } from '@/lib/onboarding'
+import { normalizeOnuId } from '@/lib/olt/console'
 import { processSoon, reconnectCustomer, suspendCustomer } from '@/lib/zones/network'
 
 const phoneRule = /^\+?[0-9 ()-]{7,20}$/
@@ -81,7 +82,7 @@ const onboardingSchema = z.object({
   onuChoice: z.string().regex(/^(onu|disc):[\w-]+$/, 'ONU inválida').optional(),
   newOnu: z.literal('on').optional(),
   onuOltId: z.string().optional(),
-  onuSerial: z.string().regex(/^[A-Za-z0-9]{8,16}$/, 'Serial GPON de 8 a 16 caracteres (ej. HWTC1A2B3C4D)').optional(),
+  onuSerial: z.string().refine((v) => normalizeOnuId(v) !== null, 'Serial GPON (ej. HWTC1A2B3C4D) o MAC EPON (ej. 00:1E:A5:11:22:33)').transform((v) => normalizeOnuId(v)!).optional(),
   oltSpeedPlanId: z.string().optional(),
   napBoxId: z.string().optional(),
   napPort: z.coerce.number().int().min(1).max(128).optional(),

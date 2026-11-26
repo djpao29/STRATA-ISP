@@ -4,6 +4,7 @@ import { decrypt } from '@/lib/crypto'
 import { audit } from '@/lib/audit'
 import { AUTH_TEMPLATES, authCommands, freeOnuId, readOlt, type DriverConfig, type OltReading } from './drivers'
 import { runCli } from './cli'
+import { systemInfo, type SnmpTarget, type SnmpV3 } from './snmp'
 import { ONU_STATUS_LABEL } from './labels'
 
 export { ONU_STATUS_LABEL, EVENT_LABEL } from './labels'
@@ -22,12 +23,36 @@ export async function getOltSettings(tenantId: string) {
   )
 }
 
-export function driverConfig(olt: OLT): DriverConfig {
+/** Acceso SNMP de la OLT: v3 (usuario) o v2c (comunidad). null si no tiene. */
+export function snmpTarget(olt: OLT): SnmpTarget | null {
+  if (olt.snmpVersion === '3') {
+    if (!olt.snmpV3User) return null
+    const level = (['noAuthNoPriv', 'authNoPriv', 'authPriv'].includes(olt.snmpV3Level ?? '') ? olt.snmpV3Level : 'authPriv') as SnmpV3['level']
+    return {
+      host: olt.host,
+      port: olt.port,
+      community: '',
+      v3: {
+        user: olt.snmpV3User,
+        level,
+        authProtocol: olt.snmpV3AuthProto === 'SHA' ? 'SHA' : 'MD5',
+        authKey: olt.snmpV3AuthKeyEnc ? decrypt(olt.snmpV3AuthKeyEnc) : '',
+        privProtocol: olt.snmpV3PrivProto === 'AES' ? 'AES' : 'DES',
+        privKey: olt.snmpV3PrivKeyEnc ? decrypt(olt.snmpV3PrivKeyEnc) : '',
+      },
+    }
+  }
   const community = olt.communityEnc ? decrypt(olt.communityEnc) : ''
+  return community ? { host: olt.host, port: olt.port, community } : null
+}
+
+export function driverConfig(olt: OLT): DriverConfig {
   return {
     brand: olt.brand,
     frame: olt.frame,
-    snmp: community ? { host: olt.host, port: olt.port, community } : null,
+    readTemplate: olt.readTemplate,
+    autofindTemplate: olt.autofindTemplate,
+    snmp: snmpTarget(olt),
     cli:
       olt.cliUsername && olt.cliPasswordEnc
         ? {
@@ -163,7 +188,16 @@ export async function applyReading(olt: OLT, reading: OltReading) {
 export async function pollOlt(oltId: string) {
   const olt = await prisma.oLT.findUniqueOrThrow({ where: { id: oltId } })
   try {
-    const reading = await readOlt(driverConfig(olt))
+    const cfg = driverConfig(olt)
+    const reading = await readOlt(cfg)
+    // Datos estándar (modelo/firmware y tiempo encendida) por SNMP, para cualquier marca.
+    if (cfg.snmp) {
+      const info = await systemInfo(cfg.snmp).catch(() => null)
+      if (info) {
+        if (reading.uptimeSec == null) reading.uptimeSec = info.uptimeSec
+        if (info.descr && info.descr !== olt.sysDescr) await prisma.oLT.update({ where: { id: olt.id }, data: { sysDescr: info.descr.slice(0, 300) } })
+      }
+    }
     return { ok: true as const, ...(await applyReading(olt, reading)) }
   } catch (e) {
     const message = (e instanceof Error ? e.message : String(e)).slice(0, 500)
