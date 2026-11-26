@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers'
 import { requireUser } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { AppShell } from '@/components/dashboard/app-shell'
@@ -29,7 +30,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     })
 
   return (
-    <AppShell user={{ name: user.name, email: user.email, role: user.role, companyName: user.tenant.name }}>
+    <AppShell sidebarTheme={cookies().get('sb-theme')?.value === 'light' ? 'light' : 'dark'} user={{ name: user.name, email: user.email, role: user.role, companyName: user.tenant.name }}>
       <NoticeBanner notices={notices} />
       {children}
     </AppShell>

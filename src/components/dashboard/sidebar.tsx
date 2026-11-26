@@ -50,6 +50,8 @@ import {
   HeartPulse,
   AlertTriangle,
   FileBarChart,
+  Sun,
+  Moon,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -196,14 +198,14 @@ function Entry({ item, pathname, depth }: { item: Item; pathname: string; depth:
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className={cn('sidebar-item w-full rounded-md', depth > 0 && 'py-2 text-sm', active && !open && 'text-blue-700')}
+        className={cn('sidebar-item w-full rounded-md', depth > 0 && 'py-2 text-sm', active && 'group-active')}
       >
         <item.icon className={cn('mr-3 shrink-0', depth > 0 ? 'h-4 w-4' : 'h-5 w-5')} />
         <span className="flex-1 truncate text-left font-medium">{item.title}</span>
         <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="ml-4 mt-1 space-y-0.5 border-l border-gray-200 pl-2">
+        <div className="sb-border ml-4 mt-1 space-y-0.5 border-l pl-2">
           {item.children.map((c) => (
             <Entry key={c.title} item={c} pathname={pathname} depth={depth + 1} />
           ))}
@@ -213,43 +215,72 @@ function Entry({ item, pathname, depth }: { item: Item; pathname: string; depth:
   )
 }
 
+export type SidebarTheme = 'dark' | 'light'
+
 export function Sidebar({
   user,
   open = false,
+  theme: initialTheme = 'dark',
 }: {
   user: { name: string; email: string; role: UserRole; companyName: string }
   open?: boolean
+  theme?: SidebarTheme
 }) {
   const pathname = usePathname()
   const items = visible(menu, user.role)
+  const [theme, setTheme] = useState<SidebarTheme>(initialTheme)
+  const toggle = () => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    // Se recuerda en este navegador (cookie de un año) y el servidor la lee para pintar sin parpadeo.
+    document.cookie = `sb-theme=${next}; path=/; max-age=31536000; samesite=lax`
+  }
 
   return (
-    <aside className={cn('sidebar relative flex shrink-0 flex-col', open && 'open')}>
-      <div className="border-b border-gray-200 p-6">
-        <div className="flex items-center space-x-3">
+    <aside data-theme={theme} className={cn('sidebar relative flex shrink-0 flex-col', open && 'open')}>
+      <div className="flex items-center justify-between px-5 pb-3 pt-5">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600">
             <span className="text-lg font-bold text-white">{user.companyName.charAt(0).toUpperCase()}</span>
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold text-gray-900">{user.companyName}</h2>
-            <p className="text-sm text-gray-500">Gestión ISP</p>
+            <h2 className="sb-strong truncate text-base font-bold">{user.companyName}</h2>
+            <p className="sb-muted text-xs">Gestión ISP</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={toggle}
+          title={theme === 'dark' ? 'Cambiar a menú blanco' : 'Cambiar a menú oscuro'}
+          aria-label={theme === 'dark' ? 'Cambiar a menú blanco' : 'Cambiar a menú oscuro'}
+          className="sb-muted rounded-md p-2 transition-colors hover:bg-[var(--sb-hover)] hover:text-[var(--sb-text-strong)]"
+        >
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+      </div>
+
+      <div className="px-3 pb-3">
+        <div className="sb-card flex items-center gap-3 rounded-lg border px-3 py-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-sm font-bold text-white">
+            {user.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="sb-strong truncate text-sm font-semibold">{user.name}</p>
+            <p className="sb-muted truncate text-xs">{ROLE_LABELS[user.role]}</p>
           </div>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4">
-        <div className="space-y-1 px-4">
+      <nav className="sb-border flex-1 overflow-y-auto border-t py-3">
+        <div className="space-y-1 px-3">
           {items.map((item) => (
             <Entry key={item.title} item={item} pathname={pathname} depth={0} />
           ))}
         </div>
       </nav>
 
-      <div className="border-t border-gray-200 p-4">
-        <p className="truncate text-sm font-medium text-gray-900">{user.name}</p>
-        <p className="truncate text-xs text-gray-500">
-          {ROLE_LABELS[user.role]} · {user.email}
-        </p>
+      <div className="sb-border border-t px-4 py-3">
+        <p className="sb-muted truncate text-xs">{user.email}</p>
       </div>
     </aside>
   )
