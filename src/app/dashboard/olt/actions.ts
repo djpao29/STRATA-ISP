@@ -436,7 +436,16 @@ export async function probeConsole(oltId: string, commands: string) {
     const cli = driverConfig(olt).cli
     if (!cli) return { error: 'Configura primero el usuario y la clave de consola de esta OLT.' }
     const r = await testConsole(cli, commands)
-    await audit({ tenantId: user.tenantId, userId: user.id, action: 'olt.console', entity: 'OLT', entityId: olt.id, details: { commands: commands.slice(0, 500) } })
+    // La salida queda en el historial (Reports) para revisarla después y ajustar las plantillas.
+    // Solo son consultas (show/display): la consola no repite claves.
+    await audit({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'olt.console',
+      entity: 'OLT',
+      entityId: olt.id,
+      details: { commands: commands.slice(0, 500), output: r.output.slice(0, 20000), onusRecognized: r.onus.length },
+    })
     return {
       output: r.output,
       onus: r.onus.slice(0, 50).map((o) => `${o.slot}/${o.port}:${o.onuId} ${o.serial} · ${o.status}${o.rxPower != null ? ` · ${o.rxPower} dBm` : ''}`),
@@ -444,7 +453,10 @@ export async function probeConsole(oltId: string, commands: string) {
       discovered: r.discovered.slice(0, 50).map((d) => `${d.slot}/${d.port} ${d.serial}`),
     }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Error desconocido' }
+    const message = e instanceof Error ? e.message : 'Error desconocido'
+    const user = await requireActionUser('olt').catch(() => null)
+    if (user) await audit({ tenantId: user.tenantId, userId: user.id, action: 'olt.console_error', entity: 'OLT', entityId: oltId, details: { commands: commands.slice(0, 500), error: message } })
+    return { error: message }
   }
 }
 
@@ -457,9 +469,13 @@ export async function probeSnmp(oltId: string) {
     if (!target) return { error: 'Esta OLT no tiene SNMP configurado (comunidad o usuario v3).' }
     const info = await systemInfo(target)
     await prisma.oLT.update({ where: { id: olt.id }, data: { sysDescr: info.descr?.slice(0, 300) ?? null } })
+    await audit({ tenantId: user.tenantId, userId: user.id, action: 'olt.snmp_test', entity: 'OLT', entityId: olt.id, details: { ok: true, descr: info.descr } })
     refresh()
     return { info }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Error desconocido' }
+    const message = e instanceof Error ? e.message : 'Error desconocido'
+    const user = await requireActionUser('olt').catch(() => null)
+    if (user) await audit({ tenantId: user.tenantId, userId: user.id, action: 'olt.snmp_test', entity: 'OLT', entityId: oltId, details: { ok: false, error: message } })
+    return { error: message }
   }
 }
