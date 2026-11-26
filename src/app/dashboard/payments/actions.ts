@@ -1,0 +1,36 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { prisma } from '@/lib/prisma'
+import { requireActionUser } from '@/lib/session'
+import { audit } from '@/lib/audit'
+import { toActionError, type ActionState } from '@/lib/actions'
+import { refreshInvoiceStatus } from '@/lib/billing'
+
+/** Aprueba o rechaza un pago. Rechazar un pago aprobado lo revierte y la factura vuelve a quedar pendiente. */
+export async function reviewPayment(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const user = await requireActionUser('payments')
+    const { id, decision } = z
+      .object({ id: z.string(), decision: z.enum(['APPROVED', 'REJECTED']) })
+      .parse({ id: formData.get('id'), decision: formData.get('decision') })
+
+    const payment = await prisma.payment.findFirst({ where: { id, tenantId: user.tenantId } })
+    if (!payment) throw new Error('El pago no existe.')
+    if (payment.status === decision) throw new Error('El pago ya tiene ese estado.')
+
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.update({ where: { id }, data: { status: decision } })
+      if (payment.invoiceId) await refreshInvoiceStatus(tx, payment.invoiceId)
+    })
+    await audit({ tenantId: user.tenantId, userId: user.id, action: `payment.${decision.toLowerCase()}`, entity: 'Payment', entityId: id })
+
+    revalidatePath('/dashboard/payments')
+    if (payment.invoiceId) revalidatePath(`/dashboard/billing/${payment.invoiceId}`)
+    revalidatePath('/dashboard/billing')
+    return { ok: true, message: decision === 'APPROVED' ? 'Pago aprobado' : 'Pago rechazado' }
+  } catch (error) {
+    return toActionError(error)
+  }
+}

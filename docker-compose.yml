@@ -1,0 +1,22 @@
+# Servicios de apoyo para desarrollo local. La app Next.js se ejecuta con `npm run dev`.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wispx-postgres
+    environment:
+      POSTGRES_USER: wispx
+      POSTGRES_PASSWORD: wispx
+      POSTGRES_DB: wispx_clone
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: wispx-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

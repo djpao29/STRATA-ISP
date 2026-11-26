@@ -1,0 +1,112 @@
+# WISPX Clone — Gestión para proveedores de internet (ISP/WISP)
+
+Aplicación web para administrar un ISP: clientes, planes, servicios, facturación mensual, pagos,
+soporte, routers, OLT/ONU, WhatsApp y reportes. Multiempresa (cada empresa ve solo sus datos) y con
+permisos por rol.
+
+**Stack:** Next.js 14 (App Router, Server Actions) · PostgreSQL · Prisma · NextAuth · Tailwind.
+
+## Módulos
+
+| Módulo | Qué hace |
+| --- | --- |
+| Clientes | Alta, edición, búsqueda, estados (pendiente, activo, suspendido, cancelado), ficha con servicios, facturas, pagos y tickets |
+| Planes | Catálogo de planes (velocidad y precio) |
+| Facturación | Facturación mensual automática sin duplicados, facturas puntuales, numeración correlativa, vencimientos, anulación, impresión |
+| Pagos | Registro de pagos por factura (parciales o totales), aprobación y rechazo, la factura se marca pagada sola |
+| Red | Inventario de IP, MAC y PPPoE por servicio, detección de IPs duplicadas |
+| Routers | Alta de equipos (contraseña cifrada) y prueba de conexión real al puerto de la API |
+| OLT/FTTH | OLTs (comunidad SNMP cifrada) y ONUs por slot/puerto asignadas a clientes |
+| Soporte | Tickets con prioridad, asignación, estados y comentarios |
+| WhatsApp | Configuración de WhatsApp Cloud API (Meta) y envío de prueba con plantilla |
+| Reportes | Facturado vs. cobrado (12 meses), resumen por estados, mayores deudores, exportación CSV |
+| Configuración | Datos de la empresa, numeración, usuarios y roles, registro de auditoría |
+
+### Roles
+
+| Rol | Acceso |
+| --- | --- |
+| Administrador | Todo |
+| Gerente | Todo salvo Configuración |
+| Facturación | Clientes, facturación, pagos, soporte, reportes |
+| Técnico | Clientes (solo lectura), red, routers, OLT, soporte |
+
+## Seguridad
+
+- Contraseñas con bcrypt; política de mínimo 10 caracteres con letras y números.
+- Máximo 5 intentos de login fallidos por correo cada 15 minutos.
+- Sesión JWT de 8 horas; desactivar un usuario o cambiarle el rol aplica en la siguiente petición.
+- Credenciales de equipos y token de WhatsApp cifrados con AES-256-GCM (`ENCRYPTION_KEY`).
+- Toda consulta filtra por empresa; las acciones verifican permisos en el servidor.
+- Registro de auditoría de las acciones importantes.
+- Cabeceras de seguridad (HSTS, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy).
+- Las variables de entorno se validan al arrancar.
+
+## Desarrollo local
+
+Requisitos: Node 20+, Docker.
+
+```bash
+cp .env.example .env          # y completa NEXTAUTH_SECRET, ENCRYPTION_KEY y SETUP_ADMIN_PASSWORD
+docker compose up -d postgres # Postgres en el puerto 5434
+npm install
+npm run db:deploy             # aplica las migraciones
+npm run setup                 # crea la empresa y el primer administrador (SETUP_* del .env)
+npm run dev                   # http://localhost:3010
+```
+
+Comandos útiles:
+
+| Comando | Para qué |
+| --- | --- |
+| `npm run db:migrate -- --name <cambio>` | Crear una migración tras modificar `prisma/schema.prisma` |
+| `npm run db:studio` | Explorar la base de datos |
+| `npm test` | Tests unitarios |
+| `npm run typecheck` / `npm run lint` | Revisión estática |
+
+Si alguna vez aparece `Cannot read properties of undefined (reading 'call')`, hay dos servidores
+usando la misma carpeta `.next`: deja uno solo, borra `.next` y vuelve a arrancar.
+
+## Producción
+
+1. En el servidor, copia el proyecto y crea `.env.production` a partir de `.env.production.example`.
+   Genera `NEXTAUTH_SECRET` y `ENCRYPTION_KEY` con
+   `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+   **Guarda `ENCRYPTION_KEY` en un lugar seguro:** sin ella no se pueden leer las credenciales guardadas.
+2. Construye y arranca (aplica las migraciones automáticamente):
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+   ```
+3. Crea la empresa y el primer administrador (una sola vez):
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.production run --rm migrate npm run setup
+   ```
+   Después borra `SETUP_ADMIN_PASSWORD` de `.env.production`.
+4. Pon un proxy con HTTPS delante del puerto 3000. Ejemplo con Caddy (`/etc/caddy/Caddyfile`):
+   ```
+   isp.tudominio.com {
+     reverse_proxy 127.0.0.1:3000
+   }
+   ```
+5. Comprueba: `curl https://isp.tudominio.com/api/health` → `{"status":"ok"}`.
+
+**Actualizar a una versión nueva:** `git pull` y repetir el paso 2.
+
+**Copias de seguridad** (programarlas a diario, guardar fuera del servidor):
+```bash
+docker compose -f docker-compose.prod.yml exec -T db pg_dump -U wispx wispx | gzip > backup-$(date +%F).sql.gz
+```
+
+## Límites conocidos
+
+- **MikroTik:** se guardan las credenciales y se comprueba que la API responde, pero la app todavía no
+  crea, corta ni reactiva clientes en el router automáticamente.
+- **OLT:** el inventario de ONUs es manual; no hay lectura por SNMP ni aprovisionamiento automático.
+- **WhatsApp:** hay configuración y envío de prueba; los recordatorios automáticos de pago necesitan
+  plantillas aprobadas por Meta y aún no están programados.
+- **Facturación electrónica (SRI):** las facturas son documentos internos, no comprobantes
+  electrónicos autorizados.
+- **Varias instancias:** el límite de intentos de login es en memoria; con más de una instancia de la
+  app hay que moverlo a Redis.
+- La facturación mensual y el paso a "vencida" se ejecutan al usarlas desde el panel; no hay tarea
+  programada (cron).

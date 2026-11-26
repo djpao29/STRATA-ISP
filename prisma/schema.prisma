@@ -1,0 +1,407 @@
+// Esquema de WISPX Clone. Los cambios se aplican con migraciones:
+//   desarrollo:  npm run db:migrate      (crea una migración nueva)
+//   producción:  npm run db:deploy       (aplica las migraciones pendientes)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  TECHNICIAN
+  BILLING
+}
+
+enum CustomerStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+  PENDING
+}
+
+enum InvoiceStatus {
+  PENDING
+  OVERDUE
+  PAID
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CARD
+  DEPOSIT
+  OTHER
+}
+
+enum RouterStatus {
+  ONLINE
+  OFFLINE
+  UNKNOWN
+}
+
+enum RouterType {
+  MIKROTIK
+  CISCO
+  JUNIPER
+  GENERIC
+}
+
+enum ClientMode {
+  DHCP
+  STATIC_IP
+  PPPoE
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum OLTStatus {
+  ONLINE
+  OFFLINE
+  UNKNOWN
+}
+
+enum ONUStatus {
+  ACTIVE
+  INACTIVE
+  LOS
+}
+
+model Tenant {
+  id                String   @id @default(cuid())
+  name              String
+  country           String   @default("EC")
+  currency          String   @default("USD")
+  timezone          String   @default("America/Guayaquil")
+  taxId             String?
+  address           String?
+  phone             String?
+  email             String?
+  isActive          Boolean  @default(true)
+  // Facturación
+  invoicePrefix     String   @default("F")
+  nextInvoiceNumber Int      @default(1)
+  dueDays           Int      @default(10)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  users     User[]
+  customers Customer[]
+  plans     Plan[]
+  services  Service[]
+  invoices  Invoice[]
+  payments  Payment[]
+  routers   Router[]
+  olts      OLT[]
+  tickets   Ticket[]
+  whatsapp  WhatsAppConfig?
+  auditLogs AuditLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  password    String
+  name        String
+  role        UserRole
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  tenantId    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  assignedTickets Ticket[]
+  ticketComments  TicketComment[]
+  payments        Payment[]
+  auditLogs       AuditLog[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Customer {
+  id           String         @id @default(cuid())
+  cedula       String
+  firstName    String
+  lastName     String
+  email        String?
+  phone        String
+  address      String?
+  city         String?
+  neighborhood String?
+  coordinates  String? // "lat,lng"
+  notes        String?
+  status       CustomerStatus @default(PENDING)
+  tenantId     String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  services Service[]
+  invoices Invoice[]
+  payments Payment[]
+  tickets  Ticket[]
+  onus     ONU[]
+
+  @@unique([tenantId, cedula])
+  @@index([tenantId, status])
+  @@map("customers")
+}
+
+model Plan {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  download    Int // Mbps
+  upload      Int // Mbps
+  price       Decimal  @db.Decimal(10, 2)
+  isActive    Boolean  @default(true)
+  tenantId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  services Service[]
+
+  @@unique([tenantId, name])
+  @@map("plans")
+}
+
+/// Un servicio es un plan contratado por un cliente, opcionalmente asociado a un router.
+model Service {
+  id          String     @id @default(cuid())
+  customerId  String
+  planId      String
+  routerId    String?
+  mode        ClientMode @default(PPPoE)
+  ipAddress   String?
+  macAddress  String?
+  pppoeUser   String?
+  isActive    Boolean    @default(true)
+  installedAt DateTime   @default(now())
+  tenantId    String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  plan     Plan      @relation(fields: [planId], references: [id])
+  router   Router?   @relation(fields: [routerId], references: [id], onDelete: SetNull)
+  invoices Invoice[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@map("services")
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  number      String
+  description String
+  amount      Decimal       @db.Decimal(10, 2)
+  status      InvoiceStatus @default(PENDING)
+  periodStart DateTime?
+  issueDate   DateTime      @default(now())
+  dueDate     DateTime
+  paidDate    DateTime?
+  customerId  String
+  serviceId   String?
+  tenantId    String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+  service  Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  payments Payment[]
+
+  @@unique([tenantId, number])
+  // Evita facturar dos veces el mismo servicio en el mismo periodo.
+  @@unique([serviceId, periodStart])
+  @@index([tenantId, status])
+  @@index([customerId])
+  @@map("invoices")
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  amount      Decimal       @db.Decimal(10, 2)
+  method      PaymentMethod @default(CASH)
+  reference   String?
+  status      PaymentStatus @default(APPROVED)
+  paidDate    DateTime      @default(now())
+  notes       String?
+  invoiceId   String?
+  customerId  String
+  createdById String?
+  tenantId    String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  customer  Customer @relation(fields: [customerId], references: [id])
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  createdBy User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model Router {
+  id            String       @id @default(cuid())
+  name          String
+  host          String
+  port          Int          @default(8728)
+  username      String
+  /// Cifrada con ENCRYPTION_KEY (AES-256-GCM).
+  passwordEnc   String
+  type          RouterType   @default(MIKROTIK)
+  status        RouterStatus @default(UNKNOWN)
+  lastCheckedAt DateTime?
+  tenantId      String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  services Service[]
+
+  @@unique([tenantId, name])
+  @@map("routers")
+}
+
+model Ticket {
+  id          String       @id @default(cuid())
+  title       String
+  description String
+  status      TicketStatus @default(OPEN)
+  priority    Priority     @default(MEDIUM)
+  customerId  String
+  assignedTo  String?
+  closedAt    DateTime?
+  tenantId    String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id])
+  customer Customer        @relation(fields: [customerId], references: [id])
+  assigned User?           @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
+  comments TicketComment[]
+
+  @@index([tenantId, status])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id        String   @id @default(cuid())
+  message   String
+  ticketId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("ticket_comments")
+}
+
+model OLT {
+  id           String    @id @default(cuid())
+  name         String
+  host         String
+  port         Int       @default(161)
+  vendor       String?
+  /// Comunidad SNMP cifrada con ENCRYPTION_KEY.
+  communityEnc String
+  status       OLTStatus @default(UNKNOWN)
+  tenantId     String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  onus   ONU[]
+
+  @@unique([tenantId, name])
+  @@map("olts")
+}
+
+model ONU {
+  id         String    @id @default(cuid())
+  serial     String
+  name       String?
+  slot       Int
+  port       Int
+  onuIndex   Int?
+  status     ONUStatus @default(ACTIVE)
+  customerId String?
+  oltId      String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  olt      OLT       @relation(fields: [oltId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([oltId, serial])
+  @@map("onus")
+}
+
+/// Configuración de WhatsApp Cloud API (Meta) por tenant.
+model WhatsAppConfig {
+  id             String   @id @default(cuid())
+  phoneNumberId  String
+  displayPhone   String?
+  /// Token de acceso cifrado con ENCRYPTION_KEY.
+  accessTokenEnc String
+  isActive       Boolean  @default(false)
+  tenantId       String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("whatsapp_configs")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String // p. ej. "customer.create"
+  entity    String
+  entityId  String?
+  details   Json?
+  userId    String?
+  tenantId  String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
