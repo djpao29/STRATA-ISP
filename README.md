@@ -61,6 +61,7 @@ Comandos útiles:
 | --- | --- |
 | `npm run db:migrate -- --name <cambio>` | Crear una migración tras modificar `prisma/schema.prisma` |
 | `npm run db:studio` | Explorar la base de datos |
+| `npm run reset-password` | Cambiar la contraseña de un usuario desde la terminal (se escribe oculta) |
 | `npm test` | Tests unitarios |
 | `npm run typecheck` / `npm run lint` | Revisión estática |
 
