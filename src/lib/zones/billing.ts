@@ -40,6 +40,11 @@ export async function generateZoneInvoices(zone: Zone, timeZone: string, now = n
   let skipped = 0
   let errors = 0
   for (const s of services) {
+    // Planes sin precio (p. ej. importados del MikroTik y aún sin tarifa) no se facturan.
+    if (Number(s.plan.price) <= 0) {
+      skipped++
+      continue
+    }
     if (todayIn(timeZone, s.installedAt) > info.cycleDate) {
       skipped++
       continue

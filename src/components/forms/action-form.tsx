@@ -25,18 +25,24 @@ export function ActionForm({
   children,
   className,
   resetOnSuccess = false,
+  onSuccess,
 }: {
   action: Action
   children: React.ReactNode
   className?: string
   resetOnSuccess?: boolean
+  /** Se llama cuando la acción termina bien (p. ej. para cerrar una ventana). */
+  onSuccess?: () => void
 }) {
   const [state, formAction] = useFormState(action, {})
   const ref = useRef<HTMLFormElement>(null)
+  const onSuccessRef = useRef(onSuccess)
+  onSuccessRef.current = onSuccess
 
   useEffect(() => {
     if (state.ok && state.message) toast.success(state.message)
     if (state.ok && resetOnSuccess) ref.current?.reset()
+    if (state.ok) onSuccessRef.current?.()
   }, [state, resetOnSuccess])
 
   return (

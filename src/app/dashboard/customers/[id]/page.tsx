@@ -283,7 +283,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
           <CardContent>
             <ServiceForm
               action={addService.bind(null, customer.id)}
-              plans={plans.map((p) => ({ value: p.id, label: `${p.name} · ${formatCurrency(p.price, currency)}` }))}
+              plans={plans.map((p) => ({ value: p.id, kind: p.kind, label: `${p.name} · ${p.kind === 'PPPOE' ? 'PPPoE' : 'Simple Queue'} · ${p.download}/${p.upload} Mbps · ${formatCurrency(p.price, currency)}` }))}
               routers={routers.map((r) => ({ value: r.id, label: `${r.name} (${r.host})` }))}
             />
           </CardContent>

@@ -238,22 +238,43 @@ model Customer {
 }
 
 model Plan {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  download    Int // Mbps
-  upload      Int // Mbps
-  price       Decimal  @db.Decimal(10, 2)
-  isActive    Boolean  @default(true)
-  tenantId    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String       @id @default(cuid())
+  name         String
+  description  String?
+  download     Int // Mbps
+  upload       Int // Mbps
+  price        Decimal      @db.Decimal(10, 2)
+  /// Cómo se controla la velocidad en el MikroTik: cola simple por IP o perfil PPP.
+  kind         PlanKind     @default(SIMPLE_QUEUE)
+  category     PlanCategory @default(RESIDENTIAL)
+  /// Simple Queue: "límite umbral tiempo" en el orden de MikroTik (subida/bajada), ej. "20M/5M 15M/4M 10".
+  burst        String?
+  /// Simple Queue: prioridad 1 (más alta) a 8.
+  priorityUp   Int          @default(8)
+  priorityDown Int          @default(8)
+  /// PPPoE: nombre del perfil en /ppp/profile.
+  pppProfile   String?
+  isActive     Boolean      @default(true)
+  tenantId     String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   services Service[]
 
   @@unique([tenantId, name])
+  @@index([tenantId, kind])
   @@map("plans")
+}
+
+enum PlanKind {
+  SIMPLE_QUEUE
+  PPPOE
+}
+
+enum PlanCategory {
+  RESIDENTIAL
+  CORPORATE
 }
 
 /// Un servicio es un plan contratado por un cliente, opcionalmente asociado a un router.

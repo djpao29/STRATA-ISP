@@ -112,7 +112,11 @@ describe('cliente REST de RouterOS', () => {
     await expect(rosWrite(conn, 'PATCH', '/system/identity')).rejects.toThrow(/no permitida/)
     await expect(rosWrite(conn, 'PUT', '/ip/firewall/filter', { chain: 'forward' })).rejects.toThrow(/no permitida/)
     await expect(rosWrite(conn, 'PATCH', '/ppp/secret/*1', { password: 'x' })).rejects.toThrow(/Campos no permitidos/)
-    await expect(rosWrite(conn, 'PATCH', '/ppp/secret/*1', { disabled: 'yes', profile: 'x' })).rejects.toThrow(/Campos no permitidos/)
+    await expect(rosWrite(conn, 'PATCH', '/ppp/secret/*1', { disabled: 'yes', service: 'any' })).rejects.toThrow(/Campos no permitidos/)
+    await expect(rosWrite(conn, 'DELETE', '/ppp/profile/*1')).rejects.toThrow(/no permitida/)
+    await expect(rosWrite(conn, 'DELETE', '/queue/simple/*1')).rejects.toThrow(/no permitida/)
+    await expect(rosWrite(conn, 'PATCH', '/ppp/profile/*1', { name: 'otro' })).rejects.toThrow(/Campos no permitidos/)
+    await expect(rosWrite(conn, 'PATCH', '/queue/simple/*1', { target: '0.0.0.0/0' })).rejects.toThrow(/Campos no permitidos/)
     expect(requests.length).toBe(before) // nada llegó al router
   })
 

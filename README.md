@@ -11,7 +11,7 @@ permisos por rol.
 | Módulo | Qué hace |
 | --- | --- |
 | Clientes | Alta, edición, búsqueda, estados (pendiente, activo, suspendido, cancelado), ficha con servicios, facturas, pagos y tickets |
-| Planes | Catálogo de planes (velocidad y precio) |
+| Planes | Pestañas **Simple Queue** y **PPPoE**: nombre, descarga, subida, precio, tipo (residencial/corporativo); burst y prioridades (Simple Queue) o perfil PPP (PPPoE). Clientes activos y suspendidos por plan, búsqueda, paginación y descarga CSV. **Importar planes desde MikroTik** lee /ppp/profile (solo lectura) y crea planes PPPoE con su velocidad (precio 0: no se facturan hasta ponerles precio). **Sincronizar** aplica el plan en el MikroTik: PPPoE crea/ajusta el perfil y lo asigna al usuario PPPoE de cada cliente; Simple Queue crea/ajusta la cola de cada cliente con IP fija. Nunca borra nada en el router |
 | Zonas | Ciclos de facturación por zona (Zona 15 y Zona 30 de serie, y las que crees): factura, límite de pago y corte por día del mes, facturación automática, cortes automáticos en MikroTik por falta de pago y reconexión automática al pagar, con registro y reintentos |
 | Facturación | Facturas mensuales generadas por las zonas, facturas puntuales, numeración correlativa, vencimientos, anulación, impresión |
 | Pagos | Registro de pagos por factura (parciales o totales), aprobación y rechazo, la factura se marca pagada sola |
@@ -178,7 +178,7 @@ Para que la address-list corte de verdad, el router debe tener una regla que la 
 ```
 El nombre de la lista se puede cambiar por router (campo `suspendList`).
 
-El usuario del MikroTik necesita, además de `read,api,rest-api`, la política **write** para aplicar cortes.
+El usuario del MikroTik necesita, además de `read,api,rest-api`, la política **write** para aplicar cortes y sincronizar planes (perfiles PPP y colas simples).
 El código solo permite estas escrituras: habilitar/deshabilitar un usuario PPP, cerrar una sesión PPP y
 agregar/quitar una IP de la address-list; cualquier otra operación se rechaza antes de llegar al router.
 

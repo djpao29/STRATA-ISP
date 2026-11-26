@@ -210,13 +210,21 @@ export async function rosRequest<T = unknown>(
 }
 
 /**
- * ESCRITURAS permitidas, únicamente para cortes y reconexiones de clientes. Lista cerrada:
- * cualquier otra ruta, método o campo se rechaza aquí, antes de llegar al router.
+ * ESCRITURAS permitidas: cortes y reconexiones de clientes, y velocidad de los planes
+ * (perfiles PPP y colas simples). Lista cerrada: cualquier otra ruta, método o campo se
+ * rechaza aquí, antes de llegar al router. Nada de esto borra perfiles ni colas.
  */
 const ID = String.raw`\*[0-9A-Fa-f]+`
+const QUEUE_FIELDS = ['max-limit', 'priority', 'burst-limit', 'burst-threshold', 'burst-time']
 const WRITE_RULES: Array<{ method: 'PUT' | 'PATCH' | 'DELETE'; path: RegExp; fields?: string[] }> = [
-  // Habilitar / deshabilitar el usuario PPP del cliente.
-  { method: 'PATCH', path: new RegExp(`^/ppp/secret/${ID}$`), fields: ['disabled'] },
+  // Habilitar / deshabilitar el usuario PPP del cliente, o asignarle el perfil de su plan.
+  { method: 'PATCH', path: new RegExp(`^/ppp/secret/${ID}$`), fields: ['disabled', 'profile'] },
+  // Perfiles PPP de los planes PPPoE: crear o ajustar la velocidad.
+  { method: 'PUT', path: /^\/ppp\/profile$/, fields: ['name', 'rate-limit', 'comment'] },
+  { method: 'PATCH', path: new RegExp(`^/ppp/profile/${ID}$`), fields: ['rate-limit'] },
+  // Colas simples de clientes de planes Simple Queue: crear o ajustar.
+  { method: 'PUT', path: /^\/queue\/simple$/, fields: ['name', 'target', 'comment', ...QUEUE_FIELDS] },
+  { method: 'PATCH', path: new RegExp(`^/queue/simple/${ID}$`), fields: QUEUE_FIELDS },
   // Cerrar la sesión PPP activa (para que el corte sea inmediato).
   { method: 'DELETE', path: new RegExp(`^/ppp/active/${ID}$`) },
   // Agregar / quitar la IP del cliente de la lista de cortes.

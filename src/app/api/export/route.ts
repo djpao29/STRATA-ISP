@@ -30,8 +30,9 @@ export async function GET(request: Request) {
     : null
   const url = new URL(request.url)
   const type = url.searchParams.get('type')
-  // El libro de movimientos es contabilidad; el resto, reportes.
-  if (!user?.isActive || !can(user.role, type === 'ledger' ? 'accounting' : 'reports')) {
+  // El libro de movimientos es contabilidad; los planes, su módulo; el resto, reportes.
+  const area = type === 'ledger' ? 'accounting' : type === 'plans' ? 'plans' : 'reports'
+  if (!user?.isActive || !can(user.role, area)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
@@ -82,6 +83,33 @@ export async function GET(request: Request) {
         r.date, r.kind === 'INGRESO' ? 'Ingreso' : 'Egreso', r.concept, r.detail, r.account,
         r.amount > 0 ? r.amount.toFixed(2) : '', r.amount < 0 ? (-r.amount).toFixed(2) : '', r.balance.toFixed(2),
       ])
+    )
+  } else if (type === 'plans') {
+    const kind = url.searchParams.get('tipo') === 'pppoe' ? 'PPPOE' : 'SIMPLE_QUEUE'
+    const plans = await prisma.plan.findMany({ where: { tenantId, kind }, orderBy: { name: 'asc' } })
+    const counts = await prisma.service.groupBy({
+      by: ['planId'],
+      where: { tenantId, isActive: true, planId: { in: plans.map((p) => p.id) }, customer: { status: { in: ['ACTIVE', 'SUSPENDED'] } } },
+      _count: true,
+    })
+    const suspended = await prisma.service.groupBy({
+      by: ['planId'],
+      where: { tenantId, isActive: true, planId: { in: plans.map((p) => p.id) }, customer: { status: 'SUSPENDED' } },
+      _count: true,
+    })
+    const n = (rows: typeof counts, id: string) => rows.find((r) => r.planId === id)?._count ?? 0
+    content = csv(
+      kind === 'PPPOE'
+        ? ['Nombre', 'Tipo', 'Perfil PPP', 'Descarga (Mbps)', 'Subida (Mbps)', 'Precio', 'Activos', 'Suspendidos', 'Estado']
+        : ['Nombre', 'Tipo', 'Descarga (Mbps)', 'Subida (Mbps)', 'Precio', 'Burst', 'Prioridad subida', 'Prioridad bajada', 'Activos', 'Suspendidos', 'Estado'],
+      plans.map((p) => {
+        const cat = p.category === 'CORPORATE' ? 'Corporativo' : 'Residencial'
+        const active = n(counts, p.id) - n(suspended, p.id)
+        const state = p.isActive ? 'Activo' : 'Inactivo'
+        return kind === 'PPPOE'
+          ? [p.name, cat, p.pppProfile, p.download, p.upload, p.price.toFixed(2), active, n(suspended, p.id), state]
+          : [p.name, cat, p.download, p.upload, p.price.toFixed(2), p.burst, p.priorityUp, p.priorityDown, active, n(suspended, p.id), state]
+      })
     )
   } else {
     return NextResponse.json({ error: 'Tipo de exportación no válido' }, { status: 400 })
