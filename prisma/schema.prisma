@@ -50,6 +50,24 @@ enum RouterStatus {
   ONLINE
   OFFLINE
   UNKNOWN
+  DEGRADED // responde, pero con alertas activas
+}
+
+enum InterfaceRole {
+  WAN
+  LAN
+  OTHER
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
 }
 
 enum RouterType {
@@ -120,6 +138,9 @@ model Tenant {
   tickets   Ticket[]
   whatsapp  WhatsAppConfig?
   auditLogs AuditLog[]
+
+  monitoringSettings MonitoringSettings?
+  monitorAlerts      MonitorAlert[]
 
   @@map("tenants")
 }
@@ -276,25 +297,148 @@ model Payment {
 }
 
 model Router {
-  id            String       @id @default(cuid())
-  name          String
-  host          String
-  port          Int          @default(8728)
-  username      String
+  id                String       @id @default(cuid())
+  name              String
+  host              String
+  /// Puerto de la API REST de RouterOS 7 (servicio www-ssl 443 o www 80).
+  port              Int          @default(443)
+  useHttps          Boolean      @default(true)
+  /// Validar el certificado TLS (desactivar solo con certificados autofirmados en red privada).
+  verifyTls         Boolean      @default(false)
+  username          String
   /// Cifrada con ENCRYPTION_KEY (AES-256-GCM).
-  passwordEnc   String
-  type          RouterType   @default(MIKROTIK)
-  status        RouterStatus @default(UNKNOWN)
-  lastCheckedAt DateTime?
-  tenantId      String
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  passwordEnc       String
+  type              RouterType   @default(MIKROTIK)
+  status            RouterStatus @default(UNKNOWN)
+  lastCheckedAt     DateTime?
+  // Monitoreo
+  monitoringEnabled Boolean      @default(true)
+  identity          String?
+  model             String?
+  osVersion         String?
+  lastSeenAt        DateTime?
+  lastError         String?
+  latencyMs         Int?
+  failCount         Int          @default(0)
+  tenantId          String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  services Service[]
+  tenant     Tenant            @relation(fields: [tenantId], references: [id])
+  services   Service[]
+  metrics    RouterMetric[]
+  interfaces RouterInterface[]
+  alerts     MonitorAlert[]
 
   @@unique([tenantId, name])
   @@map("routers")
+}
+
+/// Una muestra del estado del router por cada ciclo del recolector.
+model RouterMetric {
+  id          String   @id @default(cuid())
+  routerId    String
+  at          DateTime @default(now())
+  latencyMs   Int
+  cpuLoad     Int
+  memUsed     BigInt
+  memTotal    BigInt
+  hddUsed     BigInt
+  hddTotal    BigInt
+  temperature Float?
+  voltage     Float?
+  uptimeSec   Int
+  pppActive   Int?
+  wanRxBps    BigInt?
+  wanTxBps    BigInt?
+
+  router Router @relation(fields: [routerId], references: [id], onDelete: Cascade)
+
+  @@index([routerId, at])
+  @@map("router_metrics")
+}
+
+/// Estado actual de cada interfaz del router y su configuración en el sistema.
+model RouterInterface {
+  id          String        @id @default(cuid())
+  routerId    String
+  name        String
+  type        String
+  comment     String?
+  role        InterfaceRole @default(OTHER)
+  isSfp       Boolean       @default(false)
+  /// Guardar historial de tráfico de esta interfaz.
+  monitored   Boolean       @default(false)
+  /// Generar alerta si la interfaz se cae.
+  alertOnDown Boolean       @default(false)
+  running     Boolean       @default(false)
+  disabled    Boolean       @default(false)
+  rxBytes     BigInt        @default(0)
+  txBytes     BigInt        @default(0)
+  rxBps       BigInt        @default(0)
+  txBps       BigInt        @default(0)
+  sampledAt   DateTime?
+  missing     Boolean       @default(false)
+
+  router  Router            @relation(fields: [routerId], references: [id], onDelete: Cascade)
+  samples InterfaceSample[]
+
+  @@unique([routerId, name])
+  @@map("router_interfaces")
+}
+
+model InterfaceSample {
+  id          String   @id @default(cuid())
+  interfaceId String
+  at          DateTime @default(now())
+  rxBps       BigInt
+  txBps       BigInt
+
+  interface RouterInterface @relation(fields: [interfaceId], references: [id], onDelete: Cascade)
+
+  @@index([interfaceId, at])
+  @@map("interface_samples")
+}
+
+/// Umbrales e intervalos de monitoreo por empresa.
+model MonitoringSettings {
+  tenantId          String   @id
+  pollIntervalSec   Int      @default(60)
+  liveRefreshSec    Int      @default(5)
+  requestTimeoutSec Int      @default(8)
+  cpuThreshold      Int      @default(85)
+  memThreshold      Int      @default(90)
+  tempThreshold     Int      @default(70)
+  latencyThreshold  Int      @default(1500)
+  /// Fallos seguidos antes de marcar el router como desconectado.
+  offlineAfterFails Int      @default(2)
+  retentionDays     Int      @default(7)
+  updatedAt         DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("monitoring_settings")
+}
+
+model MonitorAlert {
+  id         String        @id @default(cuid())
+  tenantId   String
+  routerId   String
+  /// Tipo + objeto, p. ej. "cpu", "offline", "iface_down:sfp-sfpplus1". Solo una alerta activa por clave.
+  key        String
+  severity   AlertSeverity
+  status     AlertStatus   @default(ACTIVE)
+  message    String
+  value      String?
+  startedAt  DateTime      @default(now())
+  resolvedAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  router Router @relation(fields: [routerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([routerId, key, status])
+  @@map("monitor_alerts")
 }
 
 model Ticket {

@@ -10,6 +10,8 @@ export const MODULE_ROLES = {
   payments: ['ADMIN', 'MANAGER', 'BILLING'],
   network: ['ADMIN', 'MANAGER', 'TECHNICIAN'],
   routers: ['ADMIN', 'MANAGER', 'TECHNICIAN'],
+  monitoring: ['ADMIN', 'MANAGER', 'TECHNICIAN'],
+  monitoringSettings: ['ADMIN', 'MANAGER'],
   olt: ['ADMIN', 'MANAGER', 'TECHNICIAN'],
   support: ['ADMIN', 'MANAGER', 'TECHNICIAN', 'BILLING'],
   whatsapp: ['ADMIN', 'MANAGER'],

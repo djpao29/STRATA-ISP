@@ -32,7 +32,7 @@ export default async function RoutersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Routers" description="Equipos de borde donde se conectan los clientes">
+      <PageHeader title="Routers" description="Equipos de borde donde se conectan los clientes. MikroTik: API REST de RouterOS 7">
         <Button asChild>
           <Link href="/dashboard/routers/new">
             <Plus className="mr-2 h-4 w-4" />
@@ -59,6 +59,11 @@ export default async function RoutersPage() {
             </td>
             <td>{formatDateTime(r.lastCheckedAt)}</td>
             <td className="space-x-1 whitespace-nowrap text-right">
+              {r.type === 'MIKROTIK' && (
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/dashboard/monitoring/${r.id}`}>Monitorear</Link>
+                </Button>
+              )}
               <ActionButton action={testRouter} fields={{ id: r.id }} variant="outline" size="sm">
                 Probar conexión
               </ActionButton>

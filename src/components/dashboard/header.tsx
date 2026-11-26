@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { LogOut, Search, Settings, User } from 'lucide-react'
+import { LogOut, Menu, Search, Settings, User } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-export function Header({ name, email, isAdmin }: { name: string; email: string; isAdmin: boolean }) {
+export function Header({ name, email, isAdmin, onMenu }: { name: string; email: string; isAdmin: boolean; onMenu?: () => void }) {
   const router = useRouter()
   const initials = name
     .split(' ')
@@ -25,8 +25,11 @@ export function Header({ name, email, isAdmin }: { name: string; email: string; 
     .toUpperCase()
 
   return (
-    <header className="border-b border-gray-200 bg-white px-6 py-4">
-      <div className="flex items-center justify-between gap-4">
+    <header className="border-b border-gray-200 bg-white px-4 py-3 md:px-6 md:py-4">
+      <div className="flex items-center justify-between gap-2 md:gap-4">
+        <Button variant="ghost" size="icon" className="shrink-0 md:hidden" onClick={onMenu} aria-label="Abrir menú">
+          <Menu className="h-5 w-5" />
+        </Button>
         {/* Búsqueda rápida de clientes */}
         <form
           role="search"

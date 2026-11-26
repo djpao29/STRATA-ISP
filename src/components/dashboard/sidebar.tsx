@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { UserRole } from '@prisma/client'
 import {
+  Activity,
   BarChart3,
   CreditCard,
   FileText,
@@ -27,6 +28,7 @@ const menuItems: Array<{ title: string; href: string; icon: typeof Users; module
   { title: 'Facturación', href: '/dashboard/billing', icon: FileText, module: 'billing' },
   { title: 'Pagos', href: '/dashboard/payments', icon: CreditCard, module: 'payments' },
   { title: 'Red', href: '/dashboard/network', icon: Wifi, module: 'network' },
+  { title: 'Monitoreo', href: '/dashboard/monitoring', icon: Activity, module: 'monitoring' },
   { title: 'Routers', href: '/dashboard/routers', icon: Wrench, module: 'routers' },
   { title: 'OLT/FTTH', href: '/dashboard/olt', icon: Map, module: 'olt' },
   { title: 'Soporte', href: '/dashboard/support', icon: Ticket, module: 'support' },
@@ -35,11 +37,11 @@ const menuItems: Array<{ title: string; href: string; icon: typeof Users; module
   { title: 'Configuración', href: '/dashboard/settings', icon: Settings, module: 'settings' },
 ]
 
-export function Sidebar({ user }: { user: { name: string; email: string; role: UserRole; companyName: string } }) {
+export function Sidebar({ user, open = false }: { user: { name: string; email: string; role: UserRole; companyName: string }; open?: boolean }) {
   const pathname = usePathname()
 
   return (
-    <aside className="sidebar relative flex flex-col">
+    <aside className={cn('sidebar relative flex shrink-0 flex-col', open && 'open')}>
       <div className="border-b border-gray-200 p-6">
         <div className="flex items-center space-x-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600">

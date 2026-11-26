@@ -12,7 +12,7 @@ export default async function EditRouterPage({ params }: { params: { id: string 
   const user = await requireUser('routers')
   const router = await prisma.router.findFirst({
     where: { id: params.id, tenantId: user.tenantId },
-    select: { id: true, name: true, host: true, port: true, username: true, type: true },
+    select: { id: true, name: true, host: true, port: true, username: true, type: true, useHttps: true, verifyTls: true, monitoringEnabled: true },
   })
   if (!router) notFound()
 

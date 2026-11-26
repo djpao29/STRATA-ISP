@@ -36,6 +36,7 @@ const STATUS: Record<string, [string, string]> = {
   HIGH: ['Alta', orange],
   URGENT: ['Urgente', red],
   UNKNOWN: ['Sin verificar', gray],
+  DEGRADED: ['Con problemas', yellow],
   // ONU
   INACTIVE: ['Inactiva', gray],
   LOS: ['Sin señal (LOS)', red],
