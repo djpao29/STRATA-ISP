@@ -241,7 +241,7 @@ export function Sidebar({
   }
 
   return (
-    <aside data-theme={theme} className={cn('sidebar relative flex shrink-0 flex-col', open && 'open')}>
+    <aside data-theme={theme} className={cn('sidebar relative flex shrink-0 flex-col print:hidden', open && 'open')}>
       <div className="flex items-center justify-between px-5 pb-3 pt-5">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600">

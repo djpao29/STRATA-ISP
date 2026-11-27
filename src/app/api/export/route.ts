@@ -6,6 +6,8 @@ import { CUSTOMER_STATUS, INVOICE_STATUS, PAYMENT_METHOD } from '@/lib/labels'
 import { ledger } from '@/lib/accounting'
 import { monthRange } from '@/lib/finance-period'
 import { ONU_STATUS_LABEL } from '@/lib/olt/labels'
+import { customerOrder, customerWhere, readCustomerFilters } from '@/lib/customer-list'
+import { formatCustomerCode } from '@/lib/zones/billing'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +35,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const type = url.searchParams.get('type')
   // El libro de movimientos es contabilidad; los planes, su módulo; el resto, reportes.
-  const area = type === 'ledger' ? 'accounting' : type === 'plans' ? 'plans' : type === 'onus' ? 'olt' : 'reports'
+  const area = type === 'ledger' ? 'accounting' : type === 'plans' ? 'plans' : type === 'onus' ? 'olt' : type === 'customers' ? 'customers' : 'reports'
   if (!user?.isActive || !can(user.role, area)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
@@ -68,12 +70,26 @@ export async function GET(request: Request) {
       ])
     )
   } else if (type === 'customers') {
-    const rows = await prisma.customer.findMany({ where: { tenantId }, orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }] })
+    // Mismos filtros que la pantalla de Clientes.
+    const f = readCustomerFilters(Object.fromEntries(url.searchParams))
+    const rows = await prisma.customer.findMany({
+      where: customerWhere(tenantId, f),
+      orderBy: customerOrder(f),
+      include: {
+        zone: { select: { name: true } },
+        services: { where: { isActive: true }, select: { ipAddress: true, pppoeUser: true, plan: { select: { name: true } }, router: { select: { name: true } } } },
+        invoices: { where: { status: { in: ['PENDING', 'OVERDUE'] } }, select: { amount: true } },
+      },
+    })
     content = csv(
-      ['Cédula', 'Nombres', 'Apellidos', 'Teléfono', 'Correo', 'Ciudad', 'Barrio', 'Dirección', 'Estado', 'Alta'],
+      ['Código', 'Cédula', 'Nombres', 'Apellidos', 'Teléfono', 'Correo', 'Zona', 'Planes', 'IP / usuario PPPoE', 'Router', 'Ciudad', 'Barrio', 'Dirección', 'Estado', 'Suspendido desde', 'Pendiente', 'Facturas pendientes', 'Alta'],
       rows.map((r) => [
-        r.cedula, r.firstName, r.lastName, r.phone, r.email, r.city, r.neighborhood, r.address,
-        CUSTOMER_STATUS[r.status], r.createdAt,
+        formatCustomerCode(r.code), r.cedula, r.firstName, r.lastName, r.phone, r.email, r.zone?.name,
+        r.services.map((s) => s.plan.name).join(' | '),
+        r.services.map((s) => s.pppoeUser || s.ipAddress || '').filter(Boolean).join(' | '),
+        [...new Set(r.services.map((s) => s.router?.name).filter(Boolean))].join(' | '),
+        r.city, r.neighborhood, r.address, CUSTOMER_STATUS[r.status], r.status === 'SUSPENDED' ? r.suspendedAt : null,
+        r.invoices.reduce((a, i) => a + Number(i.amount), 0).toFixed(2), r.invoices.length, r.createdAt,
       ])
     )
   } else if (type === 'ledger') {
