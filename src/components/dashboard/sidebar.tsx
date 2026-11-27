@@ -58,7 +58,7 @@ import {
   type Icon,
 } from '@/components/icons/src'
 import { cn } from '@/lib/utils'
-import { can, ROLE_LABELS, type Module } from '@/lib/permissions'
+import { can, type Module } from '@/lib/permissions'
 
 type Leaf = { title: string; href: string; icon: Icon; module: Module; exact?: boolean; exclude?: string[] }
 type Group = { title: string; icon: Icon; children: Array<Leaf | Group> }
@@ -261,18 +261,6 @@ export function Sidebar({
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
-      </div>
-
-      <div className="px-3 pb-3">
-        <div className="sb-card flex items-center gap-3 rounded-lg border px-3 py-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-sm font-bold text-white">
-            {user.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <p className="sb-strong truncate text-sm font-semibold">{user.name}</p>
-            <p className="sb-muted truncate text-xs">{ROLE_LABELS[user.role]}</p>
-          </div>
-        </div>
       </div>
 
       <nav className="sb-border flex-1 overflow-y-auto border-t py-3">
