@@ -9,7 +9,17 @@ import { audit } from '@/lib/audit'
 import { formToObject, money, requiredNumber, toActionError, type ActionState } from '@/lib/actions'
 import { RouterOSError } from '@/lib/mikrotik/client'
 import { connectionFor } from '@/lib/mikrotik/connection'
-import { ensureClientQueue, ensurePppProfile, getPppProfiles, parseBurst, parseRateLimit, setSecretProfile, BURST_FORMAT_HINT } from '@/lib/mikrotik/plans'
+import {
+  ensureClientQueue,
+  ensurePppProfile,
+  getPppProfiles,
+  getSimpleQueueSpeeds,
+  parseBurst,
+  parseRateLimit,
+  setSecretProfile,
+  speedPlanName,
+  BURST_FORMAT_HINT,
+} from '@/lib/mikrotik/plans'
 import { getMonitoringSettings } from '@/lib/monitoring/settings'
 
 const PATH = '/dashboard/plans'
@@ -141,6 +151,89 @@ export async function importPppProfiles(_: ActionState, formData: FormData): Pro
     return {
       ok: true,
       message: `${created} plan(es) importado(s) de ${router.name}${skipped.length ? `; ${skipped.length} ya existían` : ''}.${created ? ' Ponles precio antes de asignarlos.' : ''}`,
+    }
+  } catch (error) {
+    return toActionError(error)
+  }
+}
+
+/**
+ * Lee las colas de /queue/simple de un MikroTik (solo lectura) y crea un plan Simple Queue por
+ * cada velocidad distinta (max-limit, ráfaga y prioridad) que aún no exista, con precio 0.
+ */
+export async function importSimpleQueues(_: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const user = await requireActionUser('plans')
+    const { routerId } = z.object({ routerId: z.string({ required_error: 'Elige el router' }) }).parse(formToObject(formData))
+    const router = await prisma.router.findFirst({ where: { id: routerId, tenantId: user.tenantId, type: 'MIKROTIK' } })
+    if (!router) throw new Error('El router no existe.')
+    const settings = await getMonitoringSettings(user.tenantId)
+    let read
+    try {
+      read = await getSimpleQueueSpeeds(connectionFor(router, settings.requestTimeoutSec))
+    } catch (e) {
+      throw new Error(`${router.name}: ${routerError(e)}`)
+    }
+    if (read.speeds.length === 0) {
+      return { ok: true, message: `${router.name} no tiene colas simples de clientes con velocidad (${read.total} cola(s) leída(s)).` }
+    }
+
+    const existing = await prisma.plan.findMany({
+      where: { tenantId: user.tenantId },
+      select: { name: true, kind: true, upload: true, download: true, burst: true, priorityUp: true, priorityDown: true },
+    })
+    const names = new Set(existing.map((p) => p.name.toLowerCase()))
+    const sameSpeed = (s: (typeof read.speeds)[number]) =>
+      existing.some(
+        (p) =>
+          p.kind === 'SIMPLE_QUEUE' &&
+          p.upload === s.upload &&
+          p.download === s.download &&
+          (p.burst || null) === s.burst &&
+          p.priorityUp === s.priorityUp &&
+          p.priorityDown === s.priorityDown
+      )
+    let created = 0
+    let skipped = 0
+    for (const s of read.speeds) {
+      if (sameSpeed(s)) {
+        skipped++
+        continue
+      }
+      // Si el nombre ya lo usa otro plan (otra ráfaga o prioridad), se distingue con un sufijo.
+      const base = speedPlanName(s)
+      let name = base
+      for (let i = 2; names.has(name.toLowerCase()); i++) name = `${base} (${i})`
+      await prisma.plan.create({
+        data: {
+          tenantId: user.tenantId,
+          kind: 'SIMPLE_QUEUE',
+          name,
+          upload: s.upload,
+          download: s.download,
+          burst: s.burst,
+          priorityUp: s.priorityUp,
+          priorityDown: s.priorityDown,
+          price: 0,
+          description: `Importado de ${router.name} (${s.queues} cola(s) con esta velocidad)`,
+        },
+      })
+      names.add(name.toLowerCase())
+      existing.push({ name, kind: 'SIMPLE_QUEUE', upload: s.upload, download: s.download, burst: s.burst, priorityUp: s.priorityUp, priorityDown: s.priorityDown })
+      created++
+    }
+    await audit({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'plan.import',
+      entity: 'Router',
+      entityId: router.id,
+      details: { source: '/queue/simple', queues: read.total, speeds: read.speeds.length, created, skipped },
+    })
+    revalidatePath(PATH)
+    return {
+      ok: true,
+      message: `${read.total} cola(s) leída(s) en ${router.name}, ${read.speeds.length} velocidad(es) distinta(s): ${created} plan(es) nuevo(s)${skipped ? `, ${skipped} ya existían` : ''}.${created ? ' Ponles precio antes de asignarlos.' : ''}`,
     }
   } catch (error) {
     return toActionError(error)

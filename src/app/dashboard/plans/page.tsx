@@ -39,7 +39,7 @@ export default async function PlansPage({ searchParams }: Props) {
       skip: (page - 1) * per,
       take: per,
     }),
-    kind === 'PPPOE' ? prisma.router.findMany({ where: { tenantId: user.tenantId, type: 'MIKROTIK' }, orderBy: { name: 'asc' }, select: { id: true, name: true } }) : [],
+    prisma.router.findMany({ where: { tenantId: user.tenantId, type: 'MIKROTIK' }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
   ])
   const ids = plans.map((p) => p.id)
   const [inService, suspended] = ids.length
@@ -67,7 +67,7 @@ export default async function PlansPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      {kind === 'PPPOE' && <ImportProfilesForm routers={routers.map((r) => ({ value: r.id, label: r.name }))} />}
+      <ImportProfilesForm kind={kind} routers={routers.map((r) => ({ value: r.id, label: r.name }))} />
 
       <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <div className="flex flex-col gap-3 bg-[#0284c7] px-5 py-4 text-white sm:flex-row sm:items-center sm:justify-between">

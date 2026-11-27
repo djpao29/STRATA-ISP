@@ -1,5 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { parseBurst, parseRate, parseRateLimit, rateLimitFor } from './plans'
+import { groupQueueSpeeds, parseBurst, parseRate, parseRateLimit, rateLimitFor, speedPlanName } from './plans'
+
+describe('importar planes desde colas simples', () => {
+  it('agrupa las colas de clientes por velocidad', () => {
+    const { speeds, ignored } = groupQueueSpeeds([
+      { name: 'Juan', 'max-limit': '5000000/20000000', 'burst-limit': '0/0', 'burst-threshold': '0/0', 'burst-time': '0s/0s', priority: '8/8' },
+      { name: 'Ana', 'max-limit': '5000000/20000000', 'burst-limit': '0/0', 'burst-threshold': '0/0', 'burst-time': '0s/0s', priority: '8/8' },
+      { name: 'Pedro', 'max-limit': '10M/10M', 'burst-limit': '20000000/20000000', 'burst-threshold': '8000000/8000000', 'burst-time': '10s/10s', priority: '4/4' },
+      { name: 'TORRE', 'max-limit': '100M/100M' },
+      { name: 'Hijo', parent: 'TORRE', 'max-limit': '3M/3M' },
+      { name: '<pppoe-x>', dynamic: 'true', 'max-limit': '5M/5M' },
+      { name: 'libre', 'max-limit': '0/0' },
+    ])
+    expect(ignored).toBe(3)
+    expect(speeds).toEqual([
+      { upload: 3, download: 3, burst: null, priorityUp: 8, priorityDown: 8, queues: 1 },
+      { upload: 10, download: 10, burst: '20M/20M 8M/8M 10/10', priorityUp: 4, priorityDown: 4, queues: 1 },
+      { upload: 5, download: 20, burst: null, priorityUp: 8, priorityDown: 8, queues: 2 },
+    ])
+    expect(parseBurst(speeds[1].burst)).toEqual({ burstLimit: '20M/20M', burstThreshold: '8M/8M', burstTime: '10s/10s' })
+  })
+
+  it('nombra el plan por su velocidad', () => {
+    expect(speedPlanName({ download: 20, upload: 5 })).toBe('20/5 Mbps')
+    expect(speedPlanName({ download: 10, upload: 10 })).toBe('10 Mbps')
+  })
+})
 
 describe('velocidades de MikroTik', () => {
   it('convierte unidades a bps', () => {

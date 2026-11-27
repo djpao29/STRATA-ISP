@@ -57,6 +57,86 @@ export async function getPppProfiles(conn: RouterConnection) {
   return rows.map((r) => ({ id: r['.id'] ?? '', name: r.name ?? '', rateLimit: r['rate-limit'] || null, isDefault: r.default === 'true' }))
 }
 
+/** bps → forma corta de MikroTik ("20M", "512k"). */
+function shortRate(value: string): string {
+  const bps = parseRate(value)
+  if (bps == null) return value
+  if (bps % 1e6 === 0) return `${bps / 1e6}M`
+  if (bps % 1e3 === 0) return `${bps / 1e3}k`
+  return String(bps)
+}
+const shortPair = (v: string | undefined) => (v ?? '').split('/').map(shortRate).join('/')
+
+export type QueueRow = {
+  name?: string
+  target?: string
+  parent?: string
+  dynamic?: string
+  'max-limit'?: string
+  'burst-limit'?: string
+  'burst-threshold'?: string
+  'burst-time'?: string
+  priority?: string
+}
+
+export type QueueSpeed = { upload: number; download: number; burst: string | null; priorityUp: number; priorityDown: number; queues: number }
+
+/**
+ * Agrupa las colas simples de clientes por velocidad: cada combinación distinta de max-limit,
+ * ráfaga y prioridad es un plan. Deja fuera las colas dinámicas (PPPoE/hotspot), las que son
+ * padre de otras (colas de grupo), las que no tienen límite y las de menos de 1 Mbps.
+ */
+export function groupQueueSpeeds(rows: QueueRow[]) {
+  const parents = new Set(rows.map((r) => r.parent).filter((p): p is string => Boolean(p) && p !== 'none'))
+  const groups = new Map<string, QueueSpeed>()
+  let ignored = 0
+  for (const r of rows) {
+    if (r.dynamic === 'true' || (r.name && parents.has(r.name))) {
+      ignored++
+      continue
+    }
+    const { upload, download } = parseRateLimit(r['max-limit'])
+    if (upload < 1 || download < 1) {
+      ignored++
+      continue
+    }
+    const limit = shortPair(r['burst-limit'])
+    const hasBurst = /[1-9]/.test(limit)
+    const time = (r['burst-time'] ?? '0s/0s').replace(/s/g, '')
+    const candidate = hasBurst ? `${limit} ${shortPair(r['burst-threshold'])} ${time}` : null
+    const burst = candidate && parseBurst(candidate) ? candidate : null
+    const [pu, pd] = (r.priority ?? '8/8').split('/').map((n) => Math.min(8, Math.max(1, Number(n) || 8)))
+    const speed = { upload, download, burst, priorityUp: pu, priorityDown: pd ?? pu }
+    const key = JSON.stringify(speed)
+    const g = groups.get(key)
+    if (g) g.queues++
+    else groups.set(key, { ...speed, queues: 1 })
+  }
+  return { speeds: [...groups.values()].sort((a, b) => a.download - b.download || a.upload - b.upload), ignored }
+}
+
+/** Nombre del plan a partir de su velocidad: "20 Mbps" o "20/5 Mbps" (bajada/subida). */
+export function speedPlanName(s: Pick<QueueSpeed, 'upload' | 'download'>) {
+  return s.download === s.upload ? `${s.download} Mbps` : `${s.download}/${s.upload} Mbps`
+}
+
+/** Lee /queue/simple (solo lectura) y devuelve las velocidades distintas que usan los clientes. */
+export async function getSimpleQueueSpeeds(conn: RouterConnection) {
+  const rows = await rosGetOptional<QueueRow[]>(conn, '/queue/simple', [
+    'name',
+    'target',
+    'parent',
+    'dynamic',
+    'max-limit',
+    'burst-limit',
+    'burst-threshold',
+    'burst-time',
+    'priority',
+  ])
+  if (rows === null) throw new RouterOSError('No se pudo leer /queue/simple en este router.', 'not_found')
+  return { total: rows.length, ...groupQueueSpeeds(rows) }
+}
+
 /** Crea el perfil PPP si no existe o ajusta su rate-limit. Devuelve qué hizo. */
 export async function ensurePppProfile(conn: RouterConnection, profile: string, plan: Pick<PlanSpeed, 'upload' | 'download'>) {
   const rateLimit = rateLimitFor(plan)
