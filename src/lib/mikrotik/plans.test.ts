@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupQueueSpeeds, parseBurst, parseRate, parseRateLimit, rateLimitFor, speedPlanName } from './plans'
+import { groupQueueSpeeds, parseBurst, parseRate, parseRateLimit, queueClients, queueHostIp, rateLimitFor, speedPlanName, splitQueueName } from './plans'
 
 describe('importar planes desde colas simples', () => {
   it('agrupa las colas de clientes por velocidad', () => {
@@ -19,6 +19,28 @@ describe('importar planes desde colas simples', () => {
       { upload: 5, download: 20, burst: null, priorityUp: 8, priorityDown: 8, queues: 2 },
     ])
     expect(parseBurst(speeds[1].burst)).toEqual({ burstLimit: '20M/20M', burstThreshold: '8M/8M', burstTime: '10s/10s' })
+  })
+
+  it('saca los clientes de las colas (una IP por cola)', () => {
+    const { clients, ignored } = queueClients([
+      { name: 'Juan Pérez', target: '10.0.0.2/32', 'max-limit': '5M/20M', comment: 'casa azul' },
+      { name: 'Ana', target: '10.0.0.3', 'max-limit': '5M/20M', disabled: 'true' },
+      { name: 'Red', target: '10.0.0.0/24', 'max-limit': '50M/50M' },
+      { name: 'Dos', target: '10.0.0.4/32,10.0.0.5/32', 'max-limit': '5M/5M' },
+      { name: '<pppoe-x>', target: '<pppoe-x>', dynamic: 'true', 'max-limit': '5M/5M' },
+    ])
+    expect(ignored).toBe(3)
+    expect(clients.map((c) => [c.queue, c.ip, c.comment, c.disabled])).toEqual([
+      ['Juan Pérez', '10.0.0.2', 'casa azul', false],
+      ['Ana', '10.0.0.3', null, true],
+    ])
+    expect(queueHostIp('300.1.1.1')).toBeNull()
+  })
+
+  it('separa nombre y apellido de la cola', () => {
+    expect(splitQueueName('Juan  Pérez Gómez')).toEqual({ firstName: 'Juan', lastName: 'Pérez Gómez' })
+    expect(splitQueueName('maria_lopez')).toEqual({ firstName: 'maria', lastName: 'lopez' })
+    expect(splitQueueName('Torre1')).toEqual({ firstName: 'Torre1', lastName: '' })
   })
 
   it('nombra el plan por su velocidad', () => {

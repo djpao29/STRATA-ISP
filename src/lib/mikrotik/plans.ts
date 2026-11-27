@@ -72,6 +72,8 @@ export type QueueRow = {
   target?: string
   parent?: string
   dynamic?: string
+  disabled?: string
+  comment?: string
   'max-limit'?: string
   'burst-limit'?: string
   'burst-threshold'?: string
@@ -81,33 +83,78 @@ export type QueueRow = {
 
 export type QueueSpeed = { upload: number; download: number; burst: string | null; priorityUp: number; priorityDown: number; queues: number }
 
+export type SpeedKey = Omit<QueueSpeed, 'queues'>
+
+/** Clave estable de una velocidad (para comparar colas con planes). */
+export const speedKey = (s: SpeedKey) => JSON.stringify([s.upload, s.download, s.burst ?? null, s.priorityUp, s.priorityDown])
+
+/** Velocidad de una cola, o null si no es de un cliente (dinámica, padre, sin límite o < 1 Mbps). */
+function queueSpeed(r: QueueRow, parents: Set<string>): SpeedKey | null {
+  if (r.dynamic === 'true' || (r.name && parents.has(r.name))) return null
+  const { upload, download } = parseRateLimit(r['max-limit'])
+  if (upload < 1 || download < 1) return null
+  const limit = shortPair(r['burst-limit'])
+  const hasBurst = /[1-9]/.test(limit)
+  const time = (r['burst-time'] ?? '0s/0s').replace(/s/g, '')
+  const candidate = hasBurst ? `${limit} ${shortPair(r['burst-threshold'])} ${time}` : null
+  const burst = candidate && parseBurst(candidate) ? candidate : null
+  const [pu, pd] = (r.priority ?? '8/8').split('/').map((n) => Math.min(8, Math.max(1, Number(n) || 8)))
+  return { upload, download, burst, priorityUp: pu, priorityDown: pd ?? pu }
+}
+
+const parentsOf = (rows: QueueRow[]) => new Set(rows.map((r) => r.parent).filter((p): p is string => Boolean(p) && p !== 'none'))
+
+/** IP del cliente si la cola apunta a un solo equipo ("10.0.0.5" o "10.0.0.5/32"); null si es una red o varias. */
+export function queueHostIp(target: string | undefined): string | null {
+  const parts = (target ?? '').split(',').map((t) => t.trim()).filter(Boolean)
+  if (parts.length !== 1) return null
+  const m = /^(\d{1,3}(?:\.\d{1,3}){3})(?:\/32)?$/.exec(parts[0])
+  if (!m || m[1].split('.').some((o) => Number(o) > 255)) return null
+  return m[1]
+}
+
+export type QueueClient = { queue: string; ip: string; comment: string | null; disabled: boolean; speed: SpeedKey }
+
+/** Clientes de las colas simples: colas de un solo equipo (IP /32) con velocidad. */
+export function queueClients(rows: QueueRow[]) {
+  const parents = parentsOf(rows)
+  const clients: QueueClient[] = []
+  let ignored = 0
+  for (const r of rows) {
+    const speed = queueSpeed(r, parents)
+    const ip = queueHostIp(r.target)
+    if (!speed || !ip) {
+      ignored++
+      continue
+    }
+    clients.push({ queue: r.name || ip, ip, comment: r.comment || null, disabled: r.disabled === 'true', speed })
+  }
+  return { clients, ignored }
+}
+
+/** "Juan Pérez Gómez" → nombre "Juan", apellido "Pérez Gómez". Quita símbolos de RouterOS como <pppoe-…>. */
+export function splitQueueName(name: string) {
+  const clean = name.replace(/[<>]/g, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const [first, ...rest] = clean.split(' ')
+  return { firstName: (first || 'Cliente').slice(0, 60), lastName: rest.join(' ').slice(0, 80) }
+}
+
 /**
  * Agrupa las colas simples de clientes por velocidad: cada combinación distinta de max-limit,
  * ráfaga y prioridad es un plan. Deja fuera las colas dinámicas (PPPoE/hotspot), las que son
  * padre de otras (colas de grupo), las que no tienen límite y las de menos de 1 Mbps.
  */
 export function groupQueueSpeeds(rows: QueueRow[]) {
-  const parents = new Set(rows.map((r) => r.parent).filter((p): p is string => Boolean(p) && p !== 'none'))
+  const parents = parentsOf(rows)
   const groups = new Map<string, QueueSpeed>()
   let ignored = 0
   for (const r of rows) {
-    if (r.dynamic === 'true' || (r.name && parents.has(r.name))) {
+    const speed = queueSpeed(r, parents)
+    if (!speed) {
       ignored++
       continue
     }
-    const { upload, download } = parseRateLimit(r['max-limit'])
-    if (upload < 1 || download < 1) {
-      ignored++
-      continue
-    }
-    const limit = shortPair(r['burst-limit'])
-    const hasBurst = /[1-9]/.test(limit)
-    const time = (r['burst-time'] ?? '0s/0s').replace(/s/g, '')
-    const candidate = hasBurst ? `${limit} ${shortPair(r['burst-threshold'])} ${time}` : null
-    const burst = candidate && parseBurst(candidate) ? candidate : null
-    const [pu, pd] = (r.priority ?? '8/8').split('/').map((n) => Math.min(8, Math.max(1, Number(n) || 8)))
-    const speed = { upload, download, burst, priorityUp: pu, priorityDown: pd ?? pu }
-    const key = JSON.stringify(speed)
+    const key = speedKey(speed)
     const g = groups.get(key)
     if (g) g.queues++
     else groups.set(key, { ...speed, queues: 1 })
@@ -120,13 +167,15 @@ export function speedPlanName(s: Pick<QueueSpeed, 'upload' | 'download'>) {
   return s.download === s.upload ? `${s.download} Mbps` : `${s.download}/${s.upload} Mbps`
 }
 
-/** Lee /queue/simple (solo lectura) y devuelve las velocidades distintas que usan los clientes. */
-export async function getSimpleQueueSpeeds(conn: RouterConnection) {
+/** Lee /queue/simple (solo lectura). */
+export async function getSimpleQueues(conn: RouterConnection) {
   const rows = await rosGetOptional<QueueRow[]>(conn, '/queue/simple', [
     'name',
     'target',
     'parent',
     'dynamic',
+    'disabled',
+    'comment',
     'max-limit',
     'burst-limit',
     'burst-threshold',
@@ -134,6 +183,12 @@ export async function getSimpleQueueSpeeds(conn: RouterConnection) {
     'priority',
   ])
   if (rows === null) throw new RouterOSError('No se pudo leer /queue/simple en este router.', 'not_found')
+  return rows
+}
+
+/** Lee /queue/simple (solo lectura) y devuelve las velocidades distintas que usan los clientes. */
+export async function getSimpleQueueSpeeds(conn: RouterConnection) {
+  const rows = await getSimpleQueues(conn)
   return { total: rows.length, ...groupQueueSpeeds(rows) }
 }
 

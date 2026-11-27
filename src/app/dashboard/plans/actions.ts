@@ -17,10 +17,10 @@ import {
   parseBurst,
   parseRateLimit,
   setSecretProfile,
-  speedPlanName,
   BURST_FORMAT_HINT,
 } from '@/lib/mikrotik/plans'
 import { getMonitoringSettings } from '@/lib/monitoring/settings'
+import { ensureSpeedPlans } from '@/lib/queue-import'
 
 const PATH = '/dashboard/plans'
 const speed = requiredNumber((n) => n.int('Número entero').min(1, 'Mínimo 1 Mbps').max(100000))
@@ -178,50 +178,7 @@ export async function importSimpleQueues(_: ActionState, formData: FormData): Pr
       return { ok: true, message: `${router.name} no tiene colas simples de clientes con velocidad (${read.total} cola(s) leída(s)).` }
     }
 
-    const existing = await prisma.plan.findMany({
-      where: { tenantId: user.tenantId },
-      select: { name: true, kind: true, upload: true, download: true, burst: true, priorityUp: true, priorityDown: true },
-    })
-    const names = new Set(existing.map((p) => p.name.toLowerCase()))
-    const sameSpeed = (s: (typeof read.speeds)[number]) =>
-      existing.some(
-        (p) =>
-          p.kind === 'SIMPLE_QUEUE' &&
-          p.upload === s.upload &&
-          p.download === s.download &&
-          (p.burst || null) === s.burst &&
-          p.priorityUp === s.priorityUp &&
-          p.priorityDown === s.priorityDown
-      )
-    let created = 0
-    let skipped = 0
-    for (const s of read.speeds) {
-      if (sameSpeed(s)) {
-        skipped++
-        continue
-      }
-      // Si el nombre ya lo usa otro plan (otra ráfaga o prioridad), se distingue con un sufijo.
-      const base = speedPlanName(s)
-      let name = base
-      for (let i = 2; names.has(name.toLowerCase()); i++) name = `${base} (${i})`
-      await prisma.plan.create({
-        data: {
-          tenantId: user.tenantId,
-          kind: 'SIMPLE_QUEUE',
-          name,
-          upload: s.upload,
-          download: s.download,
-          burst: s.burst,
-          priorityUp: s.priorityUp,
-          priorityDown: s.priorityDown,
-          price: 0,
-          description: `Importado de ${router.name} (${s.queues} cola(s) con esta velocidad)`,
-        },
-      })
-      names.add(name.toLowerCase())
-      existing.push({ name, kind: 'SIMPLE_QUEUE', upload: s.upload, download: s.download, burst: s.burst, priorityUp: s.priorityUp, priorityDown: s.priorityDown })
-      created++
-    }
+    const { created, skipped } = await ensureSpeedPlans(user.tenantId, router.name, read.speeds)
     await audit({
       tenantId: user.tenantId,
       userId: user.id,

@@ -8,12 +8,15 @@ import { requireUser } from '@/lib/session'
 import { formatDateTime } from '@/lib/format'
 import { createUser, resetUserPassword, updateCompany, updateUserAccess } from './actions'
 import { CompanyForm, NewUserForm, ResetPasswordForm, RoleSelectForm } from './forms'
+import { ImportProfilesForm } from '../plans/import-form'
+import { QueueCustomerImport } from '../plans/customer-import'
+import { can } from '@/lib/permissions'
 
 export const metadata = { title: 'Configuración' }
 
 export default async function SettingsPage() {
   const me = await requireUser('settings')
-  const [tenant, users, logs] = await Promise.all([
+  const [tenant, users, logs, routers, zones] = await Promise.all([
     prisma.tenant.findUniqueOrThrow({ where: { id: me.tenantId } }),
     prisma.user.findMany({
       where: { tenantId: me.tenantId },
@@ -26,7 +29,10 @@ export default async function SettingsPage() {
       take: 50,
       include: { user: { select: { name: true } } },
     }),
+    prisma.router.findMany({ where: { tenantId: me.tenantId, type: 'MIKROTIK' }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    prisma.zone.findMany({ where: { tenantId: me.tenantId, isActive: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
   ])
+  const routerOptions = routers.map((r) => ({ value: r.id, label: r.name }))
 
   return (
     <div className="space-y-6">
@@ -40,6 +46,22 @@ export default async function SettingsPage() {
           <CompanyForm action={updateCompany} tenant={tenant} />
         </CardContent>
       </Card>
+
+      {(can(me.role, 'plans') || can(me.role, 'customers')) && (
+        <Card id="importar-mikrotik">
+          <CardHeader>
+            <CardTitle>Importar desde MikroTik</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Trae los planes y los clientes que ya tienes en tus MikroTik, para no cargarlos uno por uno. Solo lee el router: no cambia nada en él.
+            </p>
+            {can(me.role, 'plans') && <ImportProfilesForm kind="SIMPLE_QUEUE" routers={routerOptions} />}
+            {can(me.role, 'plans') && <ImportProfilesForm kind="PPPOE" routers={routerOptions} />}
+            {can(me.role, 'customers') && <QueueCustomerImport routers={routerOptions} zones={zones.map((z) => ({ value: z.id, label: z.name }))} />}
+          </CardContent>
+        </Card>
+      )}
 
       <DataTable title="Usuarios" headers={['Nombre', 'Correo', 'Rol', 'Último acceso', 'Estado', 'Contraseña', '']} rowCount={users.length}>
         {users.map((u) => {

@@ -19,7 +19,7 @@ export function ImportProfilesForm({ routers, kind }: { routers: Array<{ value: 
         className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
-          <p className="font-semibold text-gray-900">Importar planes desde MikroTik</p>
+          <p className="font-semibold text-gray-900">Importar planes desde MikroTik ({pppoe ? 'PPPoE' : 'Simple Queue'})</p>
           {pppoe ? (
             <p className="text-xs text-gray-600">
               Lee los perfiles <code>/ppp/profile</code> y crea planes PPPoE con su velocidad (precio $0, ponlo después).
