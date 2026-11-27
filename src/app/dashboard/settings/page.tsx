@@ -1,124 +1,90 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Building2, DownloadCloud, History, MessagesSquare, Server as ServerSection, ShieldCheck as Shield, UserCircle, UserCog } from 'lucide-react'
 import { PageHeader } from '@/components/app/page-header'
-import { DataTable } from '@/components/app/data-table'
-import { StatusBadge } from '@/components/app/status-badge'
-import { ActionButton } from '@/components/forms/action-form'
-import { prisma } from '@/lib/prisma'
+import {
+  BellIcon,
+  ChatIcon,
+  CreditCardIcon,
+  GaugeIcon,
+  InvoiceIcon,
+  MonitorAlertIcon,
+  MonitoringIcon,
+  OltIcon,
+  PackageIcon,
+  RouterIcon,
+  ScissorsIcon,
+  SwitchIcon,
+  TagIcon,
+  ZoneIcon,
+} from '@/components/icons/src'
 import { requireUser } from '@/lib/session'
-import { formatDateTime } from '@/lib/format'
-import { createUser, resetUserPassword, updateCompany, updateUserAccess } from './actions'
-import { CompanyForm, NewUserForm, ResetPasswordForm, RoleSelectForm } from './forms'
-import { ImportProfilesForm } from '../plans/import-form'
-import { QueueCustomerImport } from '../plans/customer-import'
-import { can } from '@/lib/permissions'
+import { can, type Module } from '@/lib/permissions'
+import { SettingsSection, SettingsTile } from './settings-ui'
 
 export const metadata = { title: 'Configuración' }
 
+type Tile = { label: string; href: string; icon: React.ComponentProps<typeof SettingsTile>['icon']; module: Module }
+
+/** Cada tarjeta lleva a una pantalla que ya existe; se muestran solo las que el rol puede abrir. */
+const SECTIONS: Array<{ title: string; icon: Tile['icon']; tiles: Tile[] }> = [
+  {
+    title: 'Empresa y Facturación',
+    icon: Building2,
+    tiles: [
+      { label: 'Empresa', href: '/dashboard/settings/company', icon: Building2, module: 'settings' },
+      { label: 'Gestión de Personal', href: '/dashboard/settings/users', icon: UserCog, module: 'settings' },
+      { label: 'Facturación', href: '/dashboard/billing', icon: InvoiceIcon, module: 'billing' },
+      { label: 'Formas de Pago', href: '/dashboard/finance/accounts', icon: CreditCardIcon, module: 'paymentAccounts' },
+      { label: 'Categorías de Gastos', href: '/dashboard/finance/expense-categories', icon: TagIcon, module: 'expenses' },
+      { label: 'Cortes Automáticos', href: '/dashboard/zones/log', icon: ScissorsIcon, module: 'zones' },
+    ],
+  },
+  {
+    title: 'Red y Servicios',
+    icon: SwitchIcon,
+    tiles: [
+      { label: 'Zonas', href: '/dashboard/zones', icon: ZoneIcon, module: 'zones' },
+      { label: 'Planes', href: '/dashboard/plans', icon: PackageIcon, module: 'plans' },
+      { label: 'Routers', href: '/dashboard/routers', icon: RouterIcon, module: 'routers' },
+      { label: 'OLT', href: '/dashboard/olt/list', icon: OltIcon, module: 'olt' },
+      { label: 'Planes de Velocidad OLT', href: '/dashboard/olt/speed-plans', icon: GaugeIcon, module: 'olt' },
+      { label: 'VPN WireGuard', href: '/dashboard/routers#wireguard', icon: Shield, module: 'routers' },
+      { label: 'Importar desde MikroTik', href: '/dashboard/settings/import', icon: DownloadCloud, module: 'settings' },
+    ],
+  },
+  {
+    title: 'Comunicación',
+    icon: MessagesSquare,
+    tiles: [
+      { label: 'WhatsApp', href: '/dashboard/whatsapp', icon: ChatIcon, module: 'whatsapp' },
+      { label: 'Notificaciones Push', href: '/dashboard/customers/notifications', icon: BellIcon, module: 'notifications' },
+      { label: 'Avisos en Pantalla', href: '/dashboard/customers/notices', icon: MonitorAlertIcon, module: 'notices' },
+    ],
+  },
+  {
+    title: 'Sistema',
+    icon: ServerSection,
+    tiles: [
+      { label: 'Monitoreo', href: '/dashboard/monitoring/settings', icon: MonitoringIcon, module: 'monitoringSettings' },
+      { label: 'Log de Actividad', href: '/dashboard/settings/activity', icon: History, module: 'settings' },
+      { label: 'Mi Perfil', href: '/dashboard/profile', icon: UserCircle, module: 'dashboard' },
+    ],
+  },
+]
+
 export default async function SettingsPage() {
   const me = await requireUser('settings')
-  const [tenant, users, logs, routers, zones] = await Promise.all([
-    prisma.tenant.findUniqueOrThrow({ where: { id: me.tenantId } }),
-    prisma.user.findMany({
-      where: { tenantId: me.tenantId },
-      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
-      select: { id: true, name: true, email: true, role: true, isActive: true, lastLoginAt: true },
-    }),
-    prisma.auditLog.findMany({
-      where: { tenantId: me.tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      include: { user: { select: { name: true } } },
-    }),
-    prisma.router.findMany({ where: { tenantId: me.tenantId, type: 'MIKROTIK' }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
-    prisma.zone.findMany({ where: { tenantId: me.tenantId, isActive: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
-  ])
-  const routerOptions = routers.map((r) => ({ value: r.id, label: r.name }))
+  const sections = SECTIONS.map((s) => ({ ...s, tiles: s.tiles.filter((t) => can(me.role, t.module)) })).filter((s) => s.tiles.length)
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Configuración" description="Empresa, usuarios y registro de actividad" />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Empresa</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <CompanyForm action={updateCompany} tenant={tenant} />
-        </CardContent>
-      </Card>
-
-      {(can(me.role, 'plans') || can(me.role, 'customers')) && (
-        <Card id="importar-mikrotik">
-          <CardHeader>
-            <CardTitle>Importar desde MikroTik</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Trae los planes y los clientes que ya tienes en tus MikroTik, para no cargarlos uno por uno. Solo lee el router: no cambia nada en él.
-            </p>
-            {can(me.role, 'plans') && <ImportProfilesForm kind="SIMPLE_QUEUE" routers={routerOptions} />}
-            {can(me.role, 'plans') && <ImportProfilesForm kind="PPPOE" routers={routerOptions} />}
-            {can(me.role, 'customers') && <QueueCustomerImport routers={routerOptions} zones={zones.map((z) => ({ value: z.id, label: z.name }))} />}
-          </CardContent>
-        </Card>
-      )}
-
-      <DataTable title="Usuarios" headers={['Nombre', 'Correo', 'Rol', 'Último acceso', 'Estado', 'Contraseña', '']} rowCount={users.length}>
-        {users.map((u) => {
-          const self = u.id === me.id
-          return (
-            <tr key={u.id}>
-              <td className="font-medium">
-                {u.name}
-                {self && <span className="ml-1 text-xs text-muted-foreground">(tú)</span>}
-              </td>
-              <td>{u.email}</td>
-              <td>{self ? 'Administrador' : <RoleSelectForm action={updateUserAccess} id={u.id} role={u.role} />}</td>
-              <td>{formatDateTime(u.lastLoginAt)}</td>
-              <td>
-                <StatusBadge value={u.isActive ? 'ACTIVE' : 'INACTIVE'} />
-              </td>
-              <td>{!self && <ResetPasswordForm action={resetUserPassword} id={u.id} />}</td>
-              <td className="text-right">
-                {!self && (
-                  <ActionButton
-                    action={updateUserAccess}
-                    fields={{ id: u.id, isActive: String(!u.isActive) }}
-                    variant="outline"
-                    size="sm"
-                    confirm={u.isActive ? `¿Desactivar a ${u.name}? No podrá iniciar sesión.` : undefined}
-                  >
-                    {u.isActive ? 'Desactivar' : 'Activar'}
-                  </ActionButton>
-                )}
-              </td>
-            </tr>
-          )
-        })}
-      </DataTable>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Nuevo usuario</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <NewUserForm action={createUser} />
-        </CardContent>
-      </Card>
-
-      <DataTable title="Actividad reciente" headers={['Fecha', 'Usuario', 'Acción', 'Entidad']} rowCount={logs.length} emptyText="Sin actividad registrada.">
-        {logs.map((l) => (
-          <tr key={l.id}>
-            <td>{formatDateTime(l.createdAt)}</td>
-            <td>{l.user?.name ?? '—'}</td>
-            <td className="font-mono text-xs">{l.action}</td>
-            <td className="text-xs text-muted-foreground">
-              {l.entity}
-              {l.entityId && ` · ${l.entityId}`}
-            </td>
-          </tr>
-        ))}
-      </DataTable>
+    <div className="space-y-8">
+      <PageHeader title="Configuración" />
+      {sections.map((s) => (
+        <SettingsSection key={s.title} title={s.title} icon={s.icon}>
+          {s.tiles.map((t) => (
+            <SettingsTile key={t.href} href={t.href} label={t.label} icon={t.icon} />
+          ))}
+        </SettingsSection>
+      ))}
     </div>
   )
 }

@@ -117,7 +117,7 @@ export default async function RoutersPage() {
         ))}
       </DataTable>
 
-      <Card>
+      <Card id="wireguard" className="scroll-mt-20">
         <CardHeader>
           <CardTitle>VPN WireGuard</CardTitle>
         </CardHeader>

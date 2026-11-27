@@ -69,7 +69,7 @@ export async function createUser(_: ActionState, formData: FormData): Promise<Ac
       data: { ...data, password: await bcrypt.hash(data.password, 12), tenantId: admin.tenantId },
     })
     await audit({ tenantId: admin.tenantId, userId: admin.id, action: 'user.create', entity: 'User', entityId: created.id, details: { email: data.email, role: data.role } })
-    revalidatePath('/dashboard/settings')
+    revalidatePath('/dashboard/settings', 'layout')
     return { ok: true, message: `Usuario ${data.email} creado` }
   } catch (error) {
     return toActionError(error)
@@ -99,7 +99,7 @@ export async function updateUserAccess(_: ActionState, formData: FormData): Prom
 
     await prisma.user.update({ where: { id: target.id }, data: { role: data.role, isActive } })
     await audit({ tenantId: admin.tenantId, userId: admin.id, action: 'user.access', entity: 'User', entityId: target.id, details: { role: data.role, isActive } })
-    revalidatePath('/dashboard/settings')
+    revalidatePath('/dashboard/settings', 'layout')
     return { ok: true, message: 'Usuario actualizado' }
   } catch (error) {
     return toActionError(error)
