@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { Eye, Loader2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { importQueueCustomers, previewQueueCustomers, type QueuePreview } from './customer-import-actions'
+import { importRouterCustomers, previewRouterCustomers, type ImportKind, type ImportPreview } from './customer-import-actions'
 
 type Option = { value: string; label: string }
 
@@ -13,11 +13,12 @@ type Option = { value: string; label: string }
  * "Importar clientes desde MikroTik": lee las colas simples, muestra qué clientes se crearían
  * y los crea de una vez (solo en el sistema; el router no se toca).
  */
-export function QueueCustomerImport({ routers, zones }: { routers: Option[]; zones: Option[] }) {
+export function RouterCustomerImport({ routers, zones, kind }: { routers: Option[]; zones: Option[]; kind: ImportKind }) {
+  const pppoe = kind === 'PPPOE'
   const router = useRouter()
   const [routerId, setRouterId] = useState(routers[0]?.value ?? '')
   const [zoneId, setZoneId] = useState(zones[0]?.value ?? '')
-  const [preview, setPreview] = useState<QueuePreview | null>(null)
+  const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const [loading, startLoading] = useTransition()
   const [saving, startSaving] = useTransition()
@@ -25,21 +26,21 @@ export function QueueCustomerImport({ routers, zones }: { routers: Option[]; zon
   const load = () =>
     startLoading(async () => {
       setErrors([])
-      const r = await previewQueueCustomers(routerId)
+      const r = await previewRouterCustomers(routerId, kind)
       setPreview(r)
       if (!r.ok) toast.error(r.error)
     })
 
   const save = () =>
     startSaving(async () => {
-      const r = await importQueueCustomers(routerId, zoneId)
+      const r = await importRouterCustomers(routerId, kind, zoneId)
       if (!r.ok) {
         toast.error(r.error)
         return
       }
       toast.success(r.message, { duration: 8000 })
       setErrors(r.errors)
-      setPreview(await previewQueueCustomers(routerId))
+      setPreview(await previewRouterCustomers(routerId, kind))
       router.refresh()
     })
 
@@ -49,9 +50,17 @@ export function QueueCustomerImport({ routers, zones }: { routers: Option[]; zon
     <div className="rounded-lg border border-sky-200 bg-sky-50 px-5 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="font-semibold text-gray-900">Importar clientes desde MikroTik (Simple Queue)</p>
+          <p className="font-semibold text-gray-900">Importar clientes desde MikroTik ({pppoe ? 'PPPoE' : 'Simple Queue'})</p>
           <p className="text-xs text-gray-600">
-            Crea un cliente por cada cola de <code>/queue/simple</code> con su IP y el plan de su velocidad. No cambia nada en el router.
+            {pppoe ? (
+              <>
+                Crea un cliente por cada usuario de <code>/ppp/secret</code> con su usuario, clave y el plan de su perfil. No cambia nada en el router.
+              </>
+            ) : (
+              <>
+                Crea un cliente por cada cola de <code>/queue/simple</code> con su IP y el plan de su velocidad. No cambia nada en el router.
+              </>
+            )}
           </p>
         </div>
         {routers.length === 0 ? (
@@ -84,10 +93,15 @@ export function QueueCustomerImport({ routers, zones }: { routers: Option[]; zon
       {data && (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-gray-700">
-            {data.total} cola(s) en {data.router}: <strong>{data.newCount} cliente(s) nuevo(s)</strong>
+            {data.total} {pppoe ? 'usuario(s) PPPoE' : 'cola(s)'} en {data.router}: <strong>{data.newCount} cliente(s) nuevo(s)</strong>
             {data.rows.length - data.newCount > 0 && `, ${data.rows.length - data.newCount} ya están en el sistema`}
-            {data.ignored > 0 && `, ${data.ignored} ignorada(s) (dinámicas, de grupo, sin límite o sin una sola IP)`}.
-            {data.newPlans > 0 && ` Se crearán ${data.newPlans} plan(es) con precio $0 para las velocidades que no tienen plan.`}
+            {data.ignored > 0 &&
+              (pppoe
+                ? `, ${data.ignored} ignorado(s) (de otro servicio como VPN, o repetidos)`
+                : `, ${data.ignored} ignorada(s) (dinámicas, de grupo, sin límite o sin una sola IP)`)}
+            .
+            {data.newPlans > 0 && ` Se crearán ${data.newPlans} plan(es) con precio $0 para ${pppoe ? 'los perfiles' : 'las velocidades'} que no tienen plan.`}
+            {pppoe && data.noPassword > 0 && ` ${data.noPassword} usuario(s) llegan sin clave (está vacía o el usuario de la API no tiene el permiso «sensitive»); se importan sin ella.`}
           </p>
 
           {data.rows.length > 0 && (
@@ -95,25 +109,25 @@ export function QueueCustomerImport({ routers, zones }: { routers: Option[]; zon
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase text-gray-500">
                   <tr>
-                    <th className="px-3 py-2">Cola</th>
+                    <th className="px-3 py-2">{pppoe ? 'Usuario PPPoE' : 'Cola'}</th>
                     <th className="px-3 py-2">Nombre / Apellido</th>
                     <th className="px-3 py-2">IP</th>
-                    <th className="px-3 py-2">Velocidad</th>
+                    <th className="px-3 py-2">{pppoe ? 'Perfil' : 'Velocidad'}</th>
                     <th className="px-3 py-2">Plan</th>
                     <th className="px-3 py-2">Estado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {data.rows.map((r) => (
-                    <tr key={r.ip} className={r.existing ? 'text-gray-400' : undefined}>
+                    <tr key={r.key} className={r.existing ? 'text-gray-400' : undefined}>
                       <td className="px-3 py-2">
-                        {r.queue}
-                        {r.disabled && <span className="ml-1 text-xs text-amber-600">(desactivada)</span>}
+                        {r.source}
+                        {r.disabled && <span className="ml-1 text-xs text-amber-600">(desactivado en el router)</span>}
                       </td>
                       <td className="px-3 py-2">
                         {r.firstName} {r.lastName}
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs">{r.ip}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{r.ip ?? '—'}</td>
                       <td className="px-3 py-2">{r.speed}</td>
                       <td className="px-3 py-2">{r.plan ?? <span className="text-amber-700">Nuevo: {r.speed}</span>}</td>
                       <td className="px-3 py-2">{r.existing ? `Ya existe (${r.existing})` : <span className="font-medium text-green-700">Nuevo</span>}</td>
@@ -149,7 +163,7 @@ export function QueueCustomerImport({ routers, zones }: { routers: Option[]; zon
                   Importar {data.newCount} cliente(s)
                 </Button>
                 <p className="w-full text-xs text-gray-500">
-                  Quedan activos, con IP fija y sin teléfono ni factura de instalación. Completa sus datos después en Clientes.
+                  Quedan activos, {pppoe ? 'con su usuario PPPoE' : 'con IP fija'} y sin teléfono ni factura de instalación. Completa sus datos después en Clientes.
                 </p>
               </div>
             ))}

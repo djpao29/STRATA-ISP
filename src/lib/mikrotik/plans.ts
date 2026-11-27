@@ -132,6 +132,48 @@ export function queueClients(rows: QueueRow[]) {
   return { clients, ignored }
 }
 
+export type SecretRow = { name?: string; password?: string; profile?: string; service?: string; 'remote-address'?: string; disabled?: string; comment?: string }
+
+export type PppClient = { user: string; password: string | null; profile: string; ip: string | null; comment: string | null; disabled: boolean }
+
+/** Clientes PPPoE de /ppp/secret: usuarios con servicio pppoe o any (los de VPN quedan fuera). */
+export function pppClients(rows: SecretRow[]) {
+  const clients: PppClient[] = []
+  const seen = new Set<string>()
+  let ignored = 0
+  for (const r of rows) {
+    const user = (r.name ?? '').trim()
+    const service = r.service || 'any'
+    if (!user || !['pppoe', 'any'].includes(service) || seen.has(user.toLowerCase())) {
+      ignored++
+      continue
+    }
+    seen.add(user.toLowerCase())
+    clients.push({
+      user,
+      password: r.password || null,
+      profile: r.profile || 'default',
+      ip: queueHostIp(r['remote-address']),
+      comment: r.comment?.trim() || null,
+      disabled: r.disabled === 'true',
+    })
+  }
+  return { clients, ignored }
+}
+
+/** Nombre del cliente PPPoE: el comentario si parece un nombre (así lo usan muchos ISP); si no, el usuario. */
+export function pppClientName(c: Pick<PppClient, 'user' | 'comment'>) {
+  const c2 = c.comment ?? ''
+  return /\p{L}/u.test(c2) && c2.length <= 60 && !/[0-9]{5,}/.test(c2) ? c2 : c.user
+}
+
+/** Lee /ppp/secret (solo lectura). La clave viene solo si el usuario de la API tiene permiso "sensitive". */
+export async function getPppSecrets(conn: RouterConnection) {
+  const rows = await rosGetOptional<SecretRow[]>(conn, '/ppp/secret', ['name', 'password', 'profile', 'service', 'remote-address', 'disabled', 'comment'])
+  if (rows === null) throw new RouterOSError('Este router no tiene el menú /ppp/secret (¿falta el paquete PPP?).', 'not_found')
+  return rows
+}
+
 /** "Juan Pérez Gómez" → nombre "Juan", apellido "Pérez Gómez". Quita símbolos de RouterOS como <pppoe-…>. */
 export function splitQueueName(name: string) {
   const clean = name.replace(/[<>]/g, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim()

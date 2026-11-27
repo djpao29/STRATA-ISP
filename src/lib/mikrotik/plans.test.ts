@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupQueueSpeeds, parseBurst, parseRate, parseRateLimit, queueClients, queueHostIp, rateLimitFor, speedPlanName, splitQueueName } from './plans'
+import { groupQueueSpeeds, parseBurst, parseRate, parseRateLimit, pppClientName, pppClients, queueClients, queueHostIp, rateLimitFor, speedPlanName, splitQueueName } from './plans'
 
 describe('importar planes desde colas simples', () => {
   it('agrupa las colas de clientes por velocidad', () => {
@@ -35,6 +35,23 @@ describe('importar planes desde colas simples', () => {
       ['Ana', '10.0.0.3', null, true],
     ])
     expect(queueHostIp('300.1.1.1')).toBeNull()
+  })
+
+  it('saca los clientes PPPoE de /ppp/secret', () => {
+    const { clients, ignored } = pppClients([
+      { name: 'juanp', password: 'x1', profile: '20M', service: 'pppoe', 'remote-address': '10.30.0.2', comment: 'Juan Pérez' },
+      { name: 'ana01', profile: '10M', service: 'any', disabled: 'true' },
+      { name: 'vpn-oficina', profile: 'default', service: 'l2tp' },
+      { name: 'JUANP', profile: '20M', service: 'pppoe' },
+    ])
+    expect(ignored).toBe(2)
+    expect(clients).toEqual([
+      { user: 'juanp', password: 'x1', profile: '20M', ip: '10.30.0.2', comment: 'Juan Pérez', disabled: false },
+      { user: 'ana01', password: null, profile: '10M', ip: null, comment: null, disabled: true },
+    ])
+    expect(pppClientName(clients[0])).toBe('Juan Pérez')
+    expect(pppClientName(clients[1])).toBe('ana01')
+    expect(pppClientName({ user: 'u1', comment: 'tel 8095551234' })).toBe('u1')
   })
 
   it('separa nombre y apellido de la cola', () => {

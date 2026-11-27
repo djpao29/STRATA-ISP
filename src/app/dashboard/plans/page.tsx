@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { deletePlan, savePlan, syncPlan } from './actions'
 import { PageSizeSelect, PlanDialog } from './plan-form'
 import { ImportProfilesForm } from './import-form'
-import { QueueCustomerImport } from './customer-import'
+import { RouterCustomerImport } from './customer-import'
 import { can } from '@/lib/permissions'
 
 export const metadata = { title: 'Planes' }
@@ -34,7 +34,7 @@ export default async function PlansPage({ searchParams }: Props) {
   const pages = Math.max(1, Math.ceil(total / per))
   const page = Math.min(pages, Math.max(1, Number(searchParams.page) || 1))
 
-  const canImportCustomers = kind === 'SIMPLE_QUEUE' && can(user.role, 'customers')
+  const canImportCustomers = can(user.role, 'customers')
   const [plans, routers, zones] = await Promise.all([
     prisma.plan.findMany({
       where,
@@ -73,7 +73,7 @@ export default async function PlansPage({ searchParams }: Props) {
     <div className="space-y-6">
       <ImportProfilesForm kind={kind} routers={routers.map((r) => ({ value: r.id, label: r.name }))} />
       {canImportCustomers && (
-        <QueueCustomerImport routers={routers.map((r) => ({ value: r.id, label: r.name }))} zones={zones.map((z) => ({ value: z.id, label: z.name }))} />
+        <RouterCustomerImport key={kind} kind={kind} routers={routers.map((r) => ({ value: r.id, label: r.name }))} zones={zones.map((z) => ({ value: z.id, label: z.name }))} />
       )}
 
       <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
