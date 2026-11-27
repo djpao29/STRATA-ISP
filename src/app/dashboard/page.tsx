@@ -93,7 +93,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       </div>
 
       {/* Fila 1: tarjetas pequeñas */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-8">
         <KpiCard title="Clientes totales" icon={Users} color="blue" href="/dashboard/customers">
           <BigValue value={d.totalCustomers} />
           <ProgressRow label="Activos" value={d.activeCustomers} total={d.totalCustomers} color="bg-green-500" labelClass="text-green-700" />
@@ -123,7 +123,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           ) : (
             <>
               <BigValue value={d.pppoe.active} caption={`De ${d.pppoe.services} cliente(s) PPPoE en el sistema`} />
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-[10.5px] text-muted-foreground">
                 {d.pppoe.routersRead < d.pppoe.routersTotal ? `Leídos ${d.pppoe.routersRead} de ${d.pppoe.routersTotal} routers · ` : ''}
                 {d.pppoe.readAt && `Lectura de las ${formatDateTime(d.pppoe.readAt, tz).split(', ').pop()}`}
               </p>

@@ -28,11 +28,11 @@ export function KpiCard({
   children: React.ReactNode
 }) {
   const body = (
-    <div className={cn('flex h-full flex-col rounded-lg border bg-white p-4 shadow-sm', href && 'transition-shadow hover:shadow-md')}>
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">{title}</span>
-        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white', ICON_COLORS[color])}>
-          <Icon className="h-4 w-4" />
+    <div className={cn('flex h-full flex-col rounded-lg border bg-white p-3 shadow-sm', href && 'transition-shadow hover:shadow-md')}>
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <span className="text-[10.5px] font-semibold uppercase leading-tight tracking-wide text-gray-600">{title}</span>
+        <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white', ICON_COLORS[color])}>
+          <Icon className="h-3.5 w-3.5" />
         </span>
       </div>
       <div className="flex-1 text-sm">{children}</div>
@@ -50,8 +50,8 @@ export function KpiCard({
 export function BigValue({ value, caption }: { value: React.ReactNode; caption?: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xl font-bold text-gray-900">{value}</div>
-      {caption && <div className="text-xs text-gray-600">{caption}</div>}
+      <div className="text-lg font-bold leading-tight text-gray-900">{value}</div>
+      {caption && <div className="text-[11px] leading-snug text-gray-600">{caption}</div>}
     </div>
   )
 }
@@ -72,8 +72,8 @@ export function ProgressRow({
 }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0
   return (
-    <div className="mt-2">
-      <div className="flex items-center justify-between text-xs">
+    <div className="mt-1.5">
+      <div className="flex items-center justify-between text-[11px]">
         <span className={cn('font-medium', labelClass)}>{label}</span>
         <span>
           <strong>{value}</strong> <span className="text-gray-400">{pct}%</span>
@@ -111,14 +111,14 @@ export function GradientCard({
   children?: React.ReactNode
 }) {
   const body = (
-    <div className={cn('flex h-full min-h-[8.5rem] flex-col rounded-lg bg-gradient-to-br p-4 text-white shadow-sm', GRADIENTS[color])}>
+    <div className={cn('flex h-full min-h-[6.5rem] flex-col rounded-lg bg-gradient-to-br p-3 text-white shadow-sm', GRADIENTS[color])}>
       <div className="flex items-start justify-between">
         <span className="text-sm font-semibold">{title}</span>
         <Icon className="h-4 w-4 opacity-90" />
       </div>
-      <div className="mt-1 text-2xl font-bold">{value}</div>
+      <div className="mt-0.5 text-xl font-bold">{value}</div>
       <div className="text-xs font-medium opacity-90">{caption}</div>
-      {children && <div className="mt-auto pt-3">{children}</div>}
+      {children && <div className="mt-auto pt-2">{children}</div>}
     </div>
   )
   return href ? (
