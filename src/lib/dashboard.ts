@@ -23,6 +23,29 @@ async function customerGrowth(tenantId: string, timeZone: string, months: number
   })
 }
 
+/** Lecturas de más de 30 minutos no cuentan como «ahora»: el router dejó de responder al monitoreo. */
+const PPP_FRESH_MS = 30 * 60_000
+
+/**
+ * Sesiones PPPoE activas ahora: la suma de la última lectura del monitoreo de cada MikroTik
+ * (/ppp/active), y cuántos servicios PPPoE activos tiene el sistema para comparar.
+ */
+export async function pppoeSessions(tenantId: string, now = new Date()) {
+  const routers = await prisma.router.findMany({ where: { tenantId, type: 'MIKROTIK', monitoringEnabled: true }, select: { id: true } })
+  const latest = await Promise.all(
+    routers.map((r) => prisma.routerMetric.findFirst({ where: { routerId: r.id }, orderBy: { at: 'desc' }, select: { at: true, pppActive: true } }))
+  )
+  const fresh = latest.filter((m): m is { at: Date; pppActive: number } => !!m && m.pppActive !== null && now.getTime() - m.at.getTime() <= PPP_FRESH_MS)
+  const services = await prisma.service.count({ where: { tenantId, isActive: true, mode: 'PPPoE', customer: { status: { not: 'CANCELLED' } } } })
+  return {
+    active: fresh.length ? fresh.reduce((sum, m) => sum + m.pppActive, 0) : null,
+    routersRead: fresh.length,
+    routersTotal: routers.length,
+    services,
+    readAt: fresh.length ? new Date(Math.min(...fresh.map((m) => m.at.getTime()))) : null,
+  }
+}
+
 /** Todos los datos del Dashboard, de la base de datos. */
 export async function dashboardData(tenantId: string, timeZone: string, opts: { months: number; withMoney: boolean }) {
   if (opts.withMoney) await markOverdueInvoices(tenantId)
@@ -44,6 +67,7 @@ export async function dashboardData(tenantId: string, timeZone: string, opts: { 
     resolvedTickets,
     recentCustomers,
     activity,
+    pppoe,
   ] = await Promise.all([
     prisma.customer.count({ where: { tenantId, status: { not: 'CANCELLED' } } }),
     prisma.customer.count({ where: { tenantId, status: 'ACTIVE' } }),
@@ -68,6 +92,7 @@ export async function dashboardData(tenantId: string, timeZone: string, opts: { 
       take: 8,
       include: { user: { select: { name: true } } },
     }),
+    pppoeSessions(tenantId),
   ])
 
   const growth = await customerGrowth(tenantId, timeZone, opts.months)
@@ -113,6 +138,7 @@ export async function dashboardData(tenantId: string, timeZone: string, opts: { 
     suspendedCustomers,
     routersTotal,
     routersOnline,
+    pppoe,
     plans,
     pendingPayments,
     pendingCuts,
