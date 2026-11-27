@@ -1,0 +1,56 @@
+{
+  "name": "wispx-line-soft",
+  "grid": 24,
+  "live": 20,
+  "paint": "stroke",
+  "prefix": "wx",
+  "stroke": { "width": 2, "linecap": "round", "linejoin": "round" },
+  "radius": { "outer": 2, "inner": 1 },
+  "tones": {
+    "line": { "fallbackOpacity": 1 },
+    "fill": { "fallbackOpacity": 0.16 }
+  },
+  "palette": {
+    "light": {
+      "default": { "line": "#64748B", "fill": "#64748B24" },
+      "hover": { "line": "#111827", "fill": "#1118271F" },
+      "active": { "line": { "hex": "#1D4ED8", "token": "--wx-active-line" }, "fill": "#2563EB2E" },
+      "disabled": { "line": "#CBD5E1", "fill": "#CBD5E114" }
+    },
+    "dark": {
+      "default": { "line": "#94A3B8", "fill": "#94A3B829" },
+      "hover": { "line": "#F8FAFC", "fill": "#F8FAFC24" },
+      "active": { "line": "#FFFFFF", "fill": "#FFFFFF40" },
+      "disabled": { "line": "#475569", "fill": "#4755691A" }
+    }
+  },
+  "sizes": [16, 20, 24],
+  "darkMode": "class",
+  "darkSelector": ["[data-theme=\"dark\"]", ".dark"],
+  "rendering": "geometricPrecision",
+  "primaryCheck": true,
+  "context": {
+    "font": "Roboto, system-ui, -apple-system, 'Segoe UI', sans-serif",
+    "radius": 8,
+    "brand": "#2563EB",
+    "onBrand": "#FFFFFF",
+    "surface": "#FFFFFF",
+    "sidebar": "#FFFFFF",
+    "text": "#111827",
+    "border": "#E5E7EB",
+    "surfaceDark": "#0F172A",
+    "sidebarDark": "#0B1120",
+    "textDark": "#CBD5E1",
+    "borderDark": "#1E293B"
+  },
+  "rationale": [
+    { "decision": "line + soft fill (two tones)", "because": "the person chose a modern two-tone outline; the line carries the icon, the fill adds volume", "source": "interview" },
+    { "decision": "stroke 2, round caps and joins, grid 24 / live 20", "because": "Lucide (42 imports, default stroke 2) stays for generic icons; the new set sits next to it", "source": "scan: lucide-react" },
+    { "decision": "outer radius 2, inner 1", "because": "--radius is 0.5rem (8 px) → 0.2× ≈ 1.6–2 on a 24 grid; Roboto (neo-grotesque) asks for slightly tighter corners", "source": "src/app/globals.css:26; tailwind.config.js" },
+    { "decision": "light: default slate-500, hover gray-900, active blue-700, disabled slate-300", "because": "white sidebar: muted text #6B7280-ish, active item text blue-700 on blue-50", "source": "src/app/globals.css (.sidebar-item.active)" },
+    { "decision": "dark: default slate-400, hover slate-50, active white", "because": "navy sidebar #0B1120; active item is filled blue-600 with white text, so the icon goes white", "source": "src/app/globals.css (.sidebar[data-theme='dark'])" },
+    { "decision": "soft fill 14–25% of the line color", "because": "keeps the fill readable as a tint on both #FFFFFF and #0B1120 without competing with the line", "source": "contrast check" },
+    { "decision": "dark selector [data-theme=\"dark\"]", "because": "the sidebar switches theme with data-theme on <aside>, not the global .dark class", "source": "src/components/dashboard/sidebar.tsx" },
+    { "decision": "active = aria-current=\"page\"", "because": "the active menu link gets aria-current so the active tones apply (and screen readers announce it)", "source": "src/components/dashboard/sidebar.tsx" }
+  ]
+}

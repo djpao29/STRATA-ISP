@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import '@/components/icons/icons.css'
 import { Providers } from '@/components/providers'
 
 // La fuente sale de la pila definida en tailwind.config.js (Roboto si está instalada, si no la del sistema).

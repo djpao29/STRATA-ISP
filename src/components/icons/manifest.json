@@ -1,0 +1,544 @@
+{
+  "name": "wispx-icons",
+  "style": "wispx-line-soft",
+  "framework": "react",
+  "grid": 24,
+  "icons": [
+    {
+      "name": "dashboard",
+      "label": "Dashboard",
+      "group": "navigation",
+      "tags": [
+        "inicio",
+        "panel",
+        "resumen"
+      ],
+      "component": "DashboardIcon"
+    },
+    {
+      "name": "customers",
+      "label": "Clientes",
+      "group": "navigation",
+      "tags": [
+        "usuarios",
+        "personas",
+        "abonados"
+      ],
+      "component": "CustomersIcon"
+    },
+    {
+      "name": "router",
+      "label": "Router WiFi",
+      "group": "network",
+      "tags": [
+        "mikrotik",
+        "wifi",
+        "equipo"
+      ],
+      "component": "RouterIcon"
+    },
+    {
+      "name": "invoice",
+      "label": "Facturas",
+      "group": "billing",
+      "tags": [
+        "factura",
+        "documento",
+        "cobro"
+      ],
+      "component": "InvoiceIcon"
+    },
+    {
+      "name": "olt",
+      "label": "OLT",
+      "group": "network",
+      "tags": [
+        "fibra",
+        "gpon",
+        "epon",
+        "emisor"
+      ],
+      "component": "OltIcon"
+    },
+    {
+      "name": "map-pin",
+      "label": "Mapa",
+      "group": "navigation",
+      "tags": [
+        "ubicación",
+        "mapa",
+        "coordenadas"
+      ],
+      "component": "MapPinIcon"
+    },
+    {
+      "name": "settings",
+      "label": "Configuración",
+      "group": "system",
+      "tags": [
+        "ajustes",
+        "preferencias",
+        "sistema"
+      ],
+      "component": "SettingsIcon"
+    },
+    {
+      "name": "wallet",
+      "label": "Finanzas",
+      "group": "billing",
+      "tags": [
+        "billetera",
+        "dinero",
+        "finanzas"
+      ],
+      "component": "WalletIcon"
+    },
+    {
+      "name": "customer-list",
+      "label": "Lista de clientes",
+      "group": "customers",
+      "tags": [
+        "clientes",
+        "lista"
+      ],
+      "component": "CustomerListIcon"
+    },
+    {
+      "name": "bell",
+      "label": "Notificaciones",
+      "group": "customers",
+      "tags": [
+        "notificación",
+        "aviso",
+        "push"
+      ],
+      "component": "BellIcon"
+    },
+    {
+      "name": "traffic",
+      "label": "Tráfico",
+      "group": "network",
+      "tags": [
+        "subida",
+        "bajada",
+        "consumo"
+      ],
+      "component": "TrafficIcon"
+    },
+    {
+      "name": "clipboard-check",
+      "label": "Instalaciones",
+      "group": "customers",
+      "tags": [
+        "instalación",
+        "orden",
+        "tarea"
+      ],
+      "component": "ClipboardCheckIcon"
+    },
+    {
+      "name": "collection-map",
+      "label": "Mapa de cobro",
+      "group": "customers",
+      "tags": [
+        "mapa",
+        "cobro",
+        "deuda"
+      ],
+      "component": "CollectionMapIcon"
+    },
+    {
+      "name": "monitor-alert",
+      "label": "Avisos en pantalla",
+      "group": "customers",
+      "tags": [
+        "aviso",
+        "pantalla",
+        "personal"
+      ],
+      "component": "MonitorAlertIcon"
+    },
+    {
+      "name": "package",
+      "label": "Planes",
+      "group": "plans",
+      "tags": [
+        "plan",
+        "paquete",
+        "servicio"
+      ],
+      "component": "PackageIcon"
+    },
+    {
+      "name": "zone",
+      "label": "Zonas",
+      "group": "plans",
+      "tags": [
+        "zona",
+        "capas",
+        "ciclo"
+      ],
+      "component": "ZoneIcon"
+    },
+    {
+      "name": "coin-clock",
+      "label": "Pagos pendientes",
+      "group": "billing",
+      "tags": [
+        "pendiente",
+        "deuda",
+        "cobro"
+      ],
+      "component": "CoinClockIcon"
+    },
+    {
+      "name": "transfer",
+      "label": "Transacciones",
+      "group": "billing",
+      "tags": [
+        "pagos",
+        "movimientos",
+        "transacción"
+      ],
+      "component": "TransferIcon"
+    },
+    {
+      "name": "chart-bars",
+      "label": "Estadísticas",
+      "group": "billing",
+      "tags": [
+        "gráfico",
+        "reporte",
+        "estadística"
+      ],
+      "component": "ChartBarsIcon"
+    },
+    {
+      "name": "document-edit",
+      "label": "Proformas",
+      "group": "billing",
+      "tags": [
+        "proforma",
+        "cotización",
+        "borrador"
+      ],
+      "component": "DocumentEditIcon"
+    },
+    {
+      "name": "clipboard-list",
+      "label": "Reporte de pagos",
+      "group": "billing",
+      "tags": [
+        "reporte",
+        "lista",
+        "pagos"
+      ],
+      "component": "ClipboardListIcon"
+    },
+    {
+      "name": "receipt",
+      "label": "Comprobantes",
+      "group": "billing",
+      "tags": [
+        "comprobante",
+        "recibo",
+        "ticket"
+      ],
+      "component": "ReceiptIcon"
+    },
+    {
+      "name": "promise",
+      "label": "Promesas de pago",
+      "group": "billing",
+      "tags": [
+        "promesa",
+        "fecha",
+        "compromiso"
+      ],
+      "component": "PromiseIcon"
+    },
+    {
+      "name": "credit-card",
+      "label": "Formas de pago",
+      "group": "billing",
+      "tags": [
+        "tarjeta",
+        "pago",
+        "cuenta"
+      ],
+      "component": "CreditCardIcon"
+    },
+    {
+      "name": "scissors",
+      "label": "Cortes automáticos",
+      "group": "billing",
+      "tags": [
+        "corte",
+        "suspensión"
+      ],
+      "component": "ScissorsIcon"
+    },
+    {
+      "name": "banknote",
+      "label": "Gastos",
+      "group": "billing",
+      "tags": [
+        "gasto",
+        "dinero",
+        "efectivo"
+      ],
+      "component": "BanknoteIcon"
+    },
+    {
+      "name": "book",
+      "label": "Contabilidad",
+      "group": "billing",
+      "tags": [
+        "contabilidad",
+        "libro"
+      ],
+      "component": "BookIcon"
+    },
+    {
+      "name": "chart-pie",
+      "label": "Resumen",
+      "group": "billing",
+      "tags": [
+        "resumen",
+        "torta",
+        "distribución"
+      ],
+      "component": "ChartPieIcon"
+    },
+    {
+      "name": "ledger",
+      "label": "Libro de movimientos",
+      "group": "billing",
+      "tags": [
+        "libro",
+        "movimientos",
+        "diario"
+      ],
+      "component": "LedgerIcon"
+    },
+    {
+      "name": "tag",
+      "label": "Categorías",
+      "group": "billing",
+      "tags": [
+        "categoría",
+        "etiqueta"
+      ],
+      "component": "TagIcon"
+    },
+    {
+      "name": "trend-up",
+      "label": "Dashboard de cobros",
+      "group": "billing",
+      "tags": [
+        "tendencia",
+        "cobros",
+        "crecimiento"
+      ],
+      "component": "TrendUpIcon"
+    },
+    {
+      "name": "wifi",
+      "label": "Red",
+      "group": "network",
+      "tags": [
+        "red",
+        "wifi",
+        "inalámbrico"
+      ],
+      "component": "WifiIcon"
+    },
+    {
+      "name": "monitoring",
+      "label": "Monitoreo",
+      "group": "network",
+      "tags": [
+        "monitoreo",
+        "pulso",
+        "tiempo real"
+      ],
+      "component": "MonitoringIcon"
+    },
+    {
+      "name": "switch",
+      "label": "Routers",
+      "group": "network",
+      "tags": [
+        "router",
+        "equipo",
+        "mikrotik"
+      ],
+      "component": "SwitchIcon"
+    },
+    {
+      "name": "server",
+      "label": "Lista de OLT",
+      "group": "olt",
+      "tags": [
+        "servidor",
+        "equipo",
+        "olt"
+      ],
+      "component": "ServerIcon"
+    },
+    {
+      "name": "onu",
+      "label": "ONU",
+      "group": "olt",
+      "tags": [
+        "onu",
+        "fibra",
+        "equipo cliente"
+      ],
+      "component": "OnuIcon"
+    },
+    {
+      "name": "check-circle",
+      "label": "Autorizadas",
+      "group": "olt",
+      "tags": [
+        "autorizada",
+        "ok",
+        "éxito"
+      ],
+      "component": "CheckCircleIcon"
+    },
+    {
+      "name": "x-circle",
+      "label": "Sin autorizar",
+      "group": "olt",
+      "tags": [
+        "sin autorizar",
+        "rechazo",
+        "error"
+      ],
+      "component": "XCircleIcon"
+    },
+    {
+      "name": "shield-check",
+      "label": "Pre-autorizar",
+      "group": "olt",
+      "tags": [
+        "seguridad",
+        "pre-autorizar",
+        "verificado"
+      ],
+      "component": "ShieldCheckIcon"
+    },
+    {
+      "name": "clock",
+      "label": "Pendientes",
+      "group": "olt",
+      "tags": [
+        "pendiente",
+        "espera",
+        "hora"
+      ],
+      "component": "ClockIcon"
+    },
+    {
+      "name": "chip",
+      "label": "Modelo de ONU",
+      "group": "olt",
+      "tags": [
+        "modelo",
+        "chip",
+        "hardware"
+      ],
+      "component": "ChipIcon"
+    },
+    {
+      "name": "gauge",
+      "label": "Planes de velocidad",
+      "group": "olt",
+      "tags": [
+        "velocidad",
+        "medidor",
+        "megas"
+      ],
+      "component": "GaugeIcon"
+    },
+    {
+      "name": "nap-box",
+      "label": "Cajas NAP",
+      "group": "olt",
+      "tags": [
+        "nap",
+        "splitter",
+        "caja"
+      ],
+      "component": "NapBoxIcon"
+    },
+    {
+      "name": "map",
+      "label": "Mapa FTTH",
+      "group": "olt",
+      "tags": [
+        "mapa",
+        "fibra",
+        "ftth"
+      ],
+      "component": "MapIcon"
+    },
+    {
+      "name": "heart-pulse",
+      "label": "Salud de red",
+      "group": "olt",
+      "tags": [
+        "salud",
+        "señal",
+        "estado"
+      ],
+      "component": "HeartPulseIcon"
+    },
+    {
+      "name": "alert-triangle",
+      "label": "Alertas",
+      "group": "olt",
+      "tags": [
+        "alerta",
+        "advertencia",
+        "evento"
+      ],
+      "component": "AlertTriangleIcon"
+    },
+    {
+      "name": "report",
+      "label": "Reports",
+      "group": "olt",
+      "tags": [
+        "reporte",
+        "informe",
+        "documento"
+      ],
+      "component": "ReportIcon"
+    },
+    {
+      "name": "ticket",
+      "label": "Soporte",
+      "group": "system",
+      "tags": [
+        "soporte",
+        "ticket",
+        "incidencia"
+      ],
+      "component": "TicketIcon"
+    },
+    {
+      "name": "chat",
+      "label": "WhatsApp",
+      "group": "system",
+      "tags": [
+        "mensaje",
+        "chat",
+        "whatsapp"
+      ],
+      "component": "ChatIcon"
+    }
+  ]
+}
