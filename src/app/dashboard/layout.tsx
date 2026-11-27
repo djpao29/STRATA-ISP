@@ -30,7 +30,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     })
 
   return (
-    <AppShell sidebarTheme={cookies().get('sb-theme')?.value === 'light' ? 'light' : 'dark'} user={{ name: user.name, email: user.email, role: user.role, companyName: user.tenant.name }}>
+    <AppShell appTheme={cookies().get('theme')?.value === 'dark' ? 'dark' : 'light'} sidebarTheme={cookies().get('sb-theme')?.value === 'light' ? 'light' : 'dark'} user={{ name: user.name, email: user.email, role: user.role, companyName: user.tenant.name }}>
       <NoticeBanner notices={notices} />
       {children}
     </AppShell>

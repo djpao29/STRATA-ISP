@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { LogOut, Menu, Search, Settings, User } from 'lucide-react'
+import { LogOut, Menu, Moon, Search, Settings, Sun, User } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -15,7 +15,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-export function Header({ name, email, isAdmin, onMenu }: { name: string; email: string; isAdmin: boolean; onMenu?: () => void }) {
+export function Header({
+  name,
+  email,
+  isAdmin,
+  onMenu,
+  theme = 'light',
+  onToggleTheme,
+}: {
+  name: string
+  email: string
+  isAdmin: boolean
+  onMenu?: () => void
+  theme?: 'dark' | 'light'
+  onToggleTheme?: () => void
+}) {
   const router = useRouter()
   const initials = name
     .split(' ')
@@ -25,7 +39,7 @@ export function Header({ name, email, isAdmin, onMenu }: { name: string; email: 
     .toUpperCase()
 
   return (
-    <header className="border-b border-gray-200 bg-white px-4 py-3 md:px-6 md:py-4">
+    <header className="border-b border-gray-200 bg-white px-4 py-3 dark:border-[#1f2a3f] dark:bg-[#0b1220] md:px-6 md:py-4">
       <div className="flex items-center justify-between gap-2 md:gap-4">
         <Button variant="ghost" size="icon" className="shrink-0 md:hidden" onClick={onMenu} aria-label="Abrir menú">
           <Menu className="h-5 w-5" />
@@ -49,42 +63,56 @@ export function Header({ name, email, isAdmin, onMenu }: { name: string; email: 
           />
         </form>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center space-x-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback>{initials}</AvatarFallback>
-              </Avatar>
-              <span className="hidden md:inline">{name}</span>
+        <div className="flex items-center gap-1">
+          {onToggleTheme && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleTheme}
+              title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              aria-pressed={theme === 'dark'}
+            >
+              {theme === 'dark' ? <Sun className="h-5 w-5 text-amber-300" /> : <Moon className="h-5 w-5" />}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="font-normal">
-              <div className="text-sm font-medium">{name}</div>
-              <div className="truncate text-xs text-muted-foreground">{email}</div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/dashboard/profile">
-                <User className="mr-2 h-4 w-4" />
-                Mi perfil
-              </Link>
-            </DropdownMenuItem>
-            {isAdmin && (
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="flex items-center space-x-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback>{initials}</AvatarFallback>
+                </Avatar>
+                <span className="hidden md:inline">{name}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <div className="text-sm font-medium">{name}</div>
+                <div className="truncate text-xs text-muted-foreground">{email}</div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="/dashboard/settings">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Configuración
+                <Link href="/dashboard/profile">
+                  <User className="mr-2 h-4 w-4" />
+                  Mi perfil
                 </Link>
               </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-600" onSelect={() => signOut({ callbackUrl: '/auth/login' })}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Cerrar Sesión
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {isAdmin && (
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Configuración
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-red-600" onSelect={() => signOut({ callbackUrl: '/auth/login' })}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Cerrar Sesión
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </header>
   )

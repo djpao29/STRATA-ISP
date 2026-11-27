@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import './globals.css'
+import './dark.css'
 import '@/components/icons/icons.css'
 import { Providers } from '@/components/providers'
 
@@ -13,8 +15,10 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Tema de todo el sistema (claro u oscuro), guardado en este navegador; se pinta desde el servidor para que no parpadee.
+  const dark = cookies().get('theme')?.value === 'dark'
   return (
-    <html lang="es" data-theme="light">
+    <html lang="es" className={dark ? 'dark' : undefined} data-theme={dark ? 'dark' : 'light'}>
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>
       </body>

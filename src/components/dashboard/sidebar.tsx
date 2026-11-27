@@ -225,10 +225,13 @@ export function Sidebar({
   user,
   open = false,
   theme: initialTheme = 'dark',
+  forceDark = false,
 }: {
   user: { name: string; email: string; role: UserRole; companyName: string }
   open?: boolean
   theme?: SidebarTheme
+  /** Con el sistema en modo oscuro el menú va siempre oscuro. */
+  forceDark?: boolean
 }) {
   const pathname = usePathname()
   const items = visible(menu, user.role)
@@ -241,7 +244,7 @@ export function Sidebar({
   }
 
   return (
-    <aside data-theme={theme} className={cn('sidebar relative flex shrink-0 flex-col print:hidden', open && 'open')}>
+    <aside data-theme={forceDark ? 'dark' : theme} className={cn('sidebar relative flex shrink-0 flex-col print:hidden', open && 'open')}>
       <div className="flex items-center justify-between px-5 pb-3 pt-5">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600">
@@ -252,15 +255,18 @@ export function Sidebar({
             <p className="sb-muted text-xs">Gestión ISP</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={toggle}
-          title={theme === 'dark' ? 'Cambiar a menú blanco' : 'Cambiar a menú oscuro'}
-          aria-label={theme === 'dark' ? 'Cambiar a menú blanco' : 'Cambiar a menú oscuro'}
-          className="sb-muted rounded-md p-2 transition-colors hover:bg-[var(--sb-hover)] hover:text-[var(--sb-text-strong)]"
-        >
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
+        {/* Con el sistema en modo oscuro el menú va siempre oscuro: el botón de menú blanco no aplica. */}
+        {!forceDark && (
+          <button
+            type="button"
+            onClick={toggle}
+            title={theme === 'dark' ? 'Cambiar a menú blanco' : 'Cambiar a menú oscuro'}
+            aria-label={theme === 'dark' ? 'Cambiar a menú blanco' : 'Cambiar a menú oscuro'}
+            className="sb-muted rounded-md p-2 transition-colors hover:bg-[var(--sb-hover)] hover:text-[var(--sb-text-strong)]"
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+        )}
       </div>
 
       <nav className="sb-border flex-1 overflow-y-auto border-t py-3">
