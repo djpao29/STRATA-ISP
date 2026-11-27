@@ -7,19 +7,23 @@ export function DataTable({
   headers,
   emptyText = 'No hay registros todavía.',
   rowCount,
+  actions,
   children,
 }: {
   title?: string
   headers: string[]
   emptyText?: string
   rowCount: number
+  /** Botones a la derecha del título. */
+  actions?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
     <Card>
       {title && (
-        <CardHeader>
+        <CardHeader className={actions ? 'flex flex-row items-center justify-between gap-2 space-y-0' : undefined}>
           <CardTitle>{title}</CardTitle>
+          {actions}
         </CardHeader>
       )}
       <CardContent className={title ? '' : 'pt-6'}>

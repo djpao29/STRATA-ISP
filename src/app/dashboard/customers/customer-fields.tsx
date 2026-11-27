@@ -38,13 +38,15 @@ function WithSecondary({
 }
 
 /** Datos personales y ubicación del cliente. */
-export function CustomerInfoFields({ customer }: { customer?: Customer }) {
+export function CustomerInfoFields({ customer, showTitle = true }: { customer?: Customer; showTitle?: boolean }) {
   return (
     <div className="space-y-4">
-      <h2 className="flex items-center gap-2 font-semibold text-gray-900">
-        <User className="h-4 w-4 text-blue-600" />
-        Información del cliente
-      </h2>
+      {showTitle && (
+        <h2 className="flex items-center gap-2 font-semibold text-gray-900">
+          <User className="h-4 w-4 text-blue-600" />
+          Información del cliente
+        </h2>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <TextField name="firstName" label="Nombre" required maxLength={100} placeholder="Ej: Juan" defaultValue={customer?.firstName} />
         <TextField name="lastName" label="Apellido" required maxLength={100} placeholder="Ej: Pérez" defaultValue={customer?.lastName} />

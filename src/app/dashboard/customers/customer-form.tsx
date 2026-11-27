@@ -12,15 +12,17 @@ export function CustomerForm({
   customer,
   zones,
   submitLabel,
+  showTitle = true,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>
   customer?: Customer
   zones: Array<{ value: string; label: string }>
   submitLabel: string
+  showTitle?: boolean
 }) {
   return (
     <ActionForm action={action}>
-      <CustomerInfoFields customer={customer} />
+      <CustomerInfoFields customer={customer} showTitle={showTitle} />
       <SelectField
         name="zoneId"
         label="Zona de facturación"
